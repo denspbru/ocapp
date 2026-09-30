@@ -48,7 +48,7 @@ mvn test
 mvn package
 ```
 
-Исполняемый файл создаётся как `target/ocapp-1.0.0-SNAPSHOT.jar`. Для запуска JaCoCo-проверок покрытия, заданных в `pom.xml`, используйте:
+Исполняемый файл создаётся как `target/ocapp-0.1.jar`. Для запуска JaCoCo-проверок покрытия, заданных в `pom.xml`, используйте:
 
 ```bash
 mvn verify
@@ -61,19 +61,19 @@ mvn verify
 С конфигурацией из `src/main/resources/application.properties` и портом `8088`:
 
 ```bash
-java -jar target/ocapp-1.0.0-SNAPSHOT.jar
+java -jar target/ocapp-0.1.jar
 ```
 
 На другом порту:
 
 ```bash
-java -jar target/ocapp-1.0.0-SNAPSHOT.jar --server.port=8090
+java -jar target/ocapp-0.1.jar --server.port=8090
 ```
 
 С дополнительным внешним properties-файлом:
 
 ```bash
-java -jar target/ocapp-1.0.0-SNAPSHOT.jar --config=/etc/ocapp/ocapp.properties
+java -jar target/ocapp-0.1.jar --config=/etc/ocapp/ocapp.properties
 ```
 
 `--config` преобразуется приложением в `spring.config.additional-location`: встроенные значения сохраняются, внешний файл их переопределяет, а параметры командной строки имеют более высокий приоритет. Путь может содержать пробелы и преобразуется в абсолютный экранированный `file:` URI. Пустое или синтаксически неверное значение `--config` завершает запуск ошибкой.

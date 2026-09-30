@@ -3,7 +3,7 @@
 ## Платформа
 
 - JRE: Java 21+ (сборка компилируется с `release=21`).
-- Сборка: Maven 3.9+; итоговый `target/ocapp-1.0.0-SNAPSHOT.jar`.
+- Сборка: Maven 3.9+; итоговый `target/ocapp-0.1.jar`.
 - Web stack: Spring Boot 3.5.6, Undertow (Tomcat исключён), Jakarta Validation, Actuator.
 - Rendering: установленный в среде Google Chrome/Chromium, Selenium 4.49, Chrome DevTools Protocol.
 - Presentation: Apache POI 5.4.1.
@@ -12,9 +12,9 @@
 ## Запуск
 
 ```bash
-java -jar target/ocapp-1.0.0-SNAPSHOT.jar
-java -jar target/ocapp-1.0.0-SNAPSHOT.jar --server.port=8090
-java -jar target/ocapp-1.0.0-SNAPSHOT.jar --config=/etc/ocapp/ocapp.properties
+java -jar target/ocapp-0.1.jar
+java -jar target/ocapp-0.1.jar --server.port=8090
+java -jar target/ocapp-0.1.jar --config=/etc/ocapp/ocapp.properties
 ```
 
 `--config` преобразуется в Spring `spring.config.additional-location` с абсолютным экранированным `file:` URI: встроенные defaults сохраняются, внешний файл их переопределяет, а параметры командной строки имеют наивысший приоритет. Пробелы и специальные символы пути безопасно кодируются; пустой или синтаксически неверный `--config=` завершает запуск ошибкой.
