@@ -3,6 +3,13 @@ package com.nicodim.ocapp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.nicodim.ocapp.browser.BrowserFactory;
+import com.nicodim.ocapp.browser.BrowserSession;
+import com.nicodim.ocapp.config.ConverterProperties;
+import com.nicodim.ocapp.pagemodel.BlockType;
+import com.nicodim.ocapp.pagemodel.DomPageExtractor;
+import com.nicodim.ocapp.pagemodel.PageModel;
+import com.nicodim.ocapp.pagemodel.PageModelDiagnostics;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.awt.image.BufferedImage;
@@ -61,6 +68,7 @@ class RealBrowserE2EIT {
         fixture.createContext("/status/404", exchange -> targetStatus(exchange, 404));
         fixture.createContext("/status/500", exchange -> targetStatus(exchange, 500));
         fixture.createContext("/late-status", this::lateStatus);
+        fixture.createContext("/pagemodel", this::pageModelFixture);
         fixture.start();
         fixtureBase = "http://localhost:" + fixture.getAddress().getPort();
 
@@ -135,6 +143,29 @@ class RealBrowserE2EIT {
         assertThat(new String(late.body(), StandardCharsets.UTF_8)).contains("TARGET_HTTP_ERROR");
     }
 
+    @Test void extractsDeterministicPageModelFromLocalComplexFixture() throws Exception {
+        BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
+        DomPageExtractor extractor = new DomPageExtractor(application.getBean(ConverterProperties.class).getPageModel());
+        URI source = URI.create(fixtureBase + "/pagemodel");
+        try (BrowserSession session = browserFactory.open()) {
+            session.driver().get(source.toASCIIString());
+            session.driver().executeScript("scrollTo(0, 120)");
+            PageModel first = extractor.extract(session.driver(), source);
+            PageModel second = extractor.extract(session.driver(), source);
+            assertThat(PageModelDiagnostics.safeCanonicalJson(first)).isEqualTo(PageModelDiagnostics.safeCanonicalJson(second));
+            assertThat(first.blocks()).extracting(b -> b.type()).contains(BlockType.TEXT, BlockType.IMAGE, BlockType.LIST,
+                BlockType.TABLE, BlockType.SVG, BlockType.CANVAS, BlockType.CHART, BlockType.CONTAINER, BlockType.FALLBACK);
+            assertThat(first.blocks()).noneMatch(b -> b.textRuns().stream().anyMatch(r -> r.text().contains("hidden-secret")));
+            assertThat(first.blocks()).anyMatch(b -> b.transform().transformed());
+            assertThat(first.blocks()).anyMatch(b -> b.style().flexContainer());
+            assertThat(first.blocks()).anyMatch(b -> b.style().gridContainer());
+            assertThat(first.blocks()).anyMatch(b -> b.style().position().equals("absolute"));
+            assertThat(first.blocks()).anyMatch(b -> b.clipBounds() != null);
+            assertThat(first.geometry().scrollY()).isGreaterThan(0);
+            assertThat(first.blocks()).allMatch(b -> b.domOrder() >= 0 && b.visualOrder() >= 0);
+        }
+    }
+
     @Test void blocksPrivateSubresourceWithoutExternalNetwork() throws Exception {
         Response response = post("/MakeMHTML", fixtureBase + "/blocked");
         assertThat(response.status()).withFailMessage("Blocked response: %s", new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(403);
@@ -157,6 +188,25 @@ class RealBrowserE2EIT {
             <script>setTimeout(() => { const c=document.querySelector('#chart'); const x=c.getContext('2d');
             x.fillStyle='#36c'; x.fillRect(0,0,320,180); const m=document.createElement('div');
             m.id='render-ready'; m.textContent=['delayed',' chart',' rendered'].join(''); document.body.appendChild(m); }, 300);</script>
+            </body></html>
+            """);
+    }
+
+    private void pageModelFixture(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        sendHtml(exchange, """
+            <!doctype html><html lang='en'><head><style>
+            body{height:1400px;margin:0}.flex{display:flex;gap:8px}.grid{display:grid;grid-template-columns:1fr 1fr}
+            .clip{width:140px;height:35px;overflow:hidden;position:relative}.wide{width:260px}.abs{position:absolute;left:20px;top:700px;z-index:5}
+            .turn{transform:rotate(2deg)}.hidden{display:none}
+            </style></head><body>
+            <article class='flex'><section class='grid'><h1>Article</h1><p>Text <a href='/safe-link?q=local'>link</a></p></section>
+            <img src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='></article>
+            <div class='clip'><div class='wide'>clipped text</div></div><div class='turn'>transformed</div><div class='abs'>absolute</div>
+            <ul><li>one</li><li>two</li></ul><table><tr><th>H</th></tr><tr><td>V</td></tr></table>
+            <svg width='20' height='20'><rect width='20' height='20'/></svg><canvas width='20' height='20'></canvas>
+            <div class='chart' data-pptx-chart><canvas width='20' height='20'></canvas></div><video width='20' height='20'></video>
+            <p class='hidden'>hidden-secret</p><p data-pptx-ignore>ignored-secret</p><div id='render-ready'>ready</div>
             </body></html>
             """);
     }

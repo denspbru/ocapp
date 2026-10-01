@@ -51,7 +51,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 # equivalent environment gate: OCAPP_E2E_FAIL_CLOSED=true
 ```
 
-Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, delayed Canvas marker, HEAD-200/GET redirect chain, blocked private subresource и cleanup временных профилей.
+Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, delayed Canvas marker, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction на локальном complex-layout fixture и cleanup временных профилей.
 
 Строгие JaCoCo gates: instruction/line ≥90%, branch ≥70%, method/class =100%.
 
@@ -111,8 +111,21 @@ converter.security.allow-private-addresses=true
 | `converter.limits.max-capture-pixels` | `100000000` | Pre-allocation pixel limit |
 | `converter.limits.max-screenshot-bytes` | `52428800` | Base64 decoded screenshot limit |
 | `converter.pptx.max-slides` | `100` | POI slide/allocation bound |
+| `converter.page-model.max-blocks` / `max-depth` | `5000` / `64` | DOM model graph bounds до materialization |
+| `converter.page-model.max-text-length` / `max-table-cells` | `1000000` / `20000` | Общий text и table-cell budgets |
+| `converter.page-model.max-assets` / `max-asset-bytes` | `2000` / `52428800` | Asset references и оценка embedded bytes |
+| `converter.page-model.max-coordinate` / `max-warnings` | `1000000` / `500` | Geometry и bounded diagnostics |
+| `converter.page-model.max-overlap-checks` | `100000` | Верхняя граница overlap comparisons |
 
 Readiness всегда включает `document.readyState`, fonts, images, non-zero Canvas, DOM quiet и selector либо operator JS marker. PDF читается через bounded CDP stream. Base64 size проверяется до decode, PNG IHDR — до `ImageIO`, layout dimensions/pixels — до capture; PPTX PNG crops и final ZIP пишутся через bounded streams.
+
+## Внутренний PageModel (M1)
+
+После readiness trusted extraction script одним pass строит immutable renderer-independent `PageModel`: metadata/capture geometry, stable DOM-path IDs, parent/children, отдельные DOM и visual orders, normalized style subset, clipping/transform/overlap summary, text runs, links, list/table semantics, asset references, `data-pptx-*` hints и bounded warnings. Hidden, zero-area и `data-pptx-ignore` subtrees исключаются. Java validator повторно проверяет graph, finite geometry и все budgets до будущей pagination. Модель и extractor не импортируют Selenium DTO/CDP DTO или Apache POI; только browser adapter принимает `JavascriptExecutor`.
+
+`PageModelDiagnostics.safeCanonicalJson(...)` — явный opt-in для deterministic tests/диагностики: он удаляет page text, link targets и URL path/query/fragment. Отдельный явно sensitive `canonicalJsonIncludingSensitiveContent(...)` предназначен только для контролируемых тестов. Обычные production logs не сериализуют модель и не содержат page text/query URL.
+
+В M1 `POST /MakePPTX` по-прежнему всегда создаёт прежние full-page screenshot slices. Extraction выполняется advisory и fail-open только в сторону legacy screenshot path: её ошибка не меняет результат conversion. DOM-aware pagination, native/editable objects, localized fallback, API `mode` и публичная выдача PageModel **не реализованы** и относятся к будущим milestones.
 
 ## Lifecycle и health
 
@@ -133,7 +146,8 @@ Problem JSON содержит `status`, стабильный `code`, безоп�
 
 ## Известные ограничения
 
-- PPTX состоит из full-page raster slices и не содержит редактируемых DOM objects.
+- PPTX состоит из full-page raster slices и не содержит редактируемых DOM objects; M1 PageModel пока не управляет layout/output.
+- Asset references содержат metadata/URI и bounded estimate для embedded data URI; M1 не загружает и не декодирует assets и не экспортирует Canvas/SVG payload.
 - Application URL checks и DevTools interception — defense in depth, не network boundary.
 - Process-tree supervisor рассчитан на дочерние процессы того же OS user и требует разрешения среды на `ProcessHandle.destroy/destroyForcibly`; deployment-level PID/cgroup supervision остаётся дополнительным рубежом.
 - MHTML CDP API возвращает Java `String`, поэтому его исходное Chrome/Selenium representation нельзя ограничить до получения; последующее UTF-8 копирование и HTTP output ограничены.

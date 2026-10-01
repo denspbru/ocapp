@@ -20,11 +20,13 @@ public class ConverterProperties {
     @Valid private final Limits limits = new Limits();
     @Valid private final Pdf pdf = new Pdf();
     @Valid private final Pptx pptx = new Pptx();
+    @Valid private final PageModelLimits pageModel = new PageModelLimits();
     public Browser getBrowser() { return browser; }
     public Security getSecurity() { return security; }
     public Limits getLimits() { return limits; }
     public Pdf getPdf() { return pdf; }
     public Pptx getPptx() { return pptx; }
+    public PageModelLimits getPageModel() { return pageModel; }
 
     public static class Browser {
         private String binary = "";
@@ -102,6 +104,27 @@ public class ConverterProperties {
         public int getMaxCaptureHeight() { return maxCaptureHeight; } public void setMaxCaptureHeight(int v) { maxCaptureHeight = v; }
         public long getMaxCapturePixels() { return maxCapturePixels; } public void setMaxCapturePixels(long v) { maxCapturePixels = v; }
         public long getMaxScreenshotBytes() { return maxScreenshotBytes; } public void setMaxScreenshotBytes(long v) { maxScreenshotBytes = v; }
+    }
+
+    public static class PageModelLimits {
+        @Min(1) @Max(20_000) private int maxBlocks = 5_000;
+        @Min(1) @Max(256) private int maxDepth = 64;
+        @Min(1) private int maxTextLength = 1_000_000;
+        @Min(1) private int maxTableCells = 20_000;
+        @Min(1) private int maxAssets = 2_000;
+        @Min(1) private long maxAssetBytes = 50L * 1024 * 1024;
+        @DecimalMin("1.0") private double maxCoordinate = 1_000_000;
+        @Min(0) @Max(10_000) private int maxWarnings = 500;
+        @Min(0) private int maxOverlapChecks = 100_000;
+        public int getMaxBlocks() { return maxBlocks; } public void setMaxBlocks(int v) { maxBlocks=v; }
+        public int getMaxDepth() { return maxDepth; } public void setMaxDepth(int v) { maxDepth=v; }
+        public int getMaxTextLength() { return maxTextLength; } public void setMaxTextLength(int v) { maxTextLength=v; }
+        public int getMaxTableCells() { return maxTableCells; } public void setMaxTableCells(int v) { maxTableCells=v; }
+        public int getMaxAssets() { return maxAssets; } public void setMaxAssets(int v) { maxAssets=v; }
+        public long getMaxAssetBytes() { return maxAssetBytes; } public void setMaxAssetBytes(long v) { maxAssetBytes=v; }
+        public double getMaxCoordinate() { return maxCoordinate; } public void setMaxCoordinate(double v) { maxCoordinate=v; }
+        public int getMaxWarnings() { return maxWarnings; } public void setMaxWarnings(int v) { maxWarnings=v; }
+        public int getMaxOverlapChecks() { return maxOverlapChecks; } public void setMaxOverlapChecks(int v) { maxOverlapChecks=v; }
     }
 
     public static class Pdf {

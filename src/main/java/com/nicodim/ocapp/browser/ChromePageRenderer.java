@@ -4,6 +4,7 @@ import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.conversion.OutputFormat;
 import com.nicodim.ocapp.conversion.PageRenderer;
 import com.nicodim.ocapp.conversion.RenderContext;
+import com.nicodim.ocapp.pagemodel.DomPageExtractor;
 import com.nicodim.ocapp.security.UrlSecurityPolicy;
 import com.nicodim.ocapp.support.ConversionException;
 import java.awt.Dimension;
@@ -87,7 +88,12 @@ public class ChromePageRenderer implements PageRenderer {
             byte[] result = switch (format) {
                 case MHTML -> captureMhtml(driver);
                 case PDF -> capturePdf(driver);
-                case PPTX -> capturePptx(driver);
+                case PPTX -> {
+                    // M1 extraction is intentionally advisory until M2 consumes PageModel.
+                    // Legacy screenshot conversion must remain available on every extraction failure.
+                    tryExtractPageModel(driver);
+                    yield capturePptx(driver);
+                }
             };
             throwBlocked(blockedRequest);
             NavigationTrace.Result capturedNavigation = trace.result();
@@ -272,6 +278,14 @@ public class ChromePageRenderer implements PageRenderer {
             return output.toByteArray();
         } finally {
             driver.executeCdpCommand("IO.close", Map.of("handle", stream));
+        }
+    }
+
+    private void tryExtractPageModel(ChromeDriver driver) {
+        try { new DomPageExtractor(properties.getPageModel()).extract(driver, URI.create(driver.getCurrentUrl())); }
+        catch (RuntimeException ignored) {
+            // No page URL, text, model fragment, or exception detail is logged. M2 will define
+            // how a validated model is consumed; M1 cannot alter the existing visual output.
         }
     }
 
