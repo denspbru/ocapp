@@ -14,7 +14,10 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -47,8 +50,12 @@ class RealBrowserE2EIT {
     private String fixtureBase;
     private String applicationBase;
     private Set<Path> profilesBefore;
+    private PrintStream originalErr;
+    private ByteArrayOutputStream capturedErr;
 
     @BeforeAll void startLocalFixtureAndApplication() throws Exception {
+        originalErr=System.err;capturedErr=new ByteArrayOutputStream();
+        System.setErr(new PrintStream(new OutputStream(){@Override public void write(int b)throws IOException{originalErr.write(b);capturedErr.write(b);}@Override public void write(byte[] b,int o,int l)throws IOException{originalErr.write(b,o,l);capturedErr.write(b,o,l);}},true,StandardCharsets.UTF_8));
         Path chrome = findChrome();
         Path driver = findDriver(chrome);
         boolean failClosed = Boolean.parseBoolean(System.getProperty("ocapp.e2e.failClosed", "false"))
@@ -95,6 +102,9 @@ class RealBrowserE2EIT {
     @AfterAll void stopEverything() throws Exception {
         if (application != null) application.close();
         if (fixture != null) fixture.stop(0);
+        System.err.flush();System.setErr(originalErr);
+        String stderr=capturedErr.toString(StandardCharsets.UTF_8);
+        assertThat(stderr).doesNotContain("Fetch domain is not enabled","Exception in thread \"CDP Connection\"");
         if (profilesBefore != null) {
             Thread.sleep(100);
             assertThat(temporaryProfiles()).containsExactlyInAnyOrderElementsOf(profilesBefore);
@@ -163,6 +173,10 @@ class RealBrowserE2EIT {
             assertThat(first.blocks()).anyMatch(b -> b.clipBounds() != null);
             assertThat(first.geometry().scrollY()).isGreaterThan(0);
             assertThat(first.blocks()).allMatch(b -> b.domOrder() >= 0 && b.visualOrder() >= 0);
+            assertThat(first.blocks()).anyMatch(b -> b.textRuns().stream().anyMatch(r -> r.text().contains("direct body text")));
+            assertThat(first.blocks()).anyMatch(b -> b.textRuns().stream().anyMatch(r -> r.text().contains("explicitly visible")));
+            assertThat(first.blocks()).filteredOn(b -> b.table()!=null).singleElement().satisfies(b ->
+                assertThat(b.table().cells()).anyMatch(c -> c.row()==1 && c.column()==1));
         }
     }
 
@@ -199,11 +213,12 @@ class RealBrowserE2EIT {
             body{height:1400px;margin:0}.flex{display:flex;gap:8px}.grid{display:grid;grid-template-columns:1fr 1fr}
             .clip{width:140px;height:35px;overflow:hidden;position:relative}.wide{width:260px}.abs{position:absolute;left:20px;top:700px;z-index:5}
             .turn{transform:rotate(2deg)}.hidden{display:none}
-            </style></head><body>
+            </style></head><body>direct body text
             <article class='flex'><section class='grid'><h1>Article</h1><p>Text <a href='/safe-link?q=local'>link</a></p></section>
             <img src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='></article>
             <div class='clip'><div class='wide'>clipped text</div></div><div class='turn'>transformed</div><div class='abs'>absolute</div>
-            <ul><li>one</li><li>two</li></ul><table><tr><th>H</th></tr><tr><td>V</td></tr></table>
+            <ul><li>one</li><li>two</li></ul><table><tr><th rowspan='2'>H</th><th>X</th></tr><tr><td>V</td></tr></table>
+            <div style='visibility:hidden'><span style='visibility:visible'>explicitly visible</span></div>
             <svg width='20' height='20'><rect width='20' height='20'/></svg><canvas width='20' height='20'></canvas>
             <div class='chart' data-pptx-chart><canvas width='20' height='20'></canvas></div><video width='20' height='20'></video>
             <p class='hidden'>hidden-secret</p><p data-pptx-ignore>ignored-secret</p><div id='render-ready'>ready</div>

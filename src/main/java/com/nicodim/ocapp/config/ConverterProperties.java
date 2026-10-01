@@ -116,6 +116,8 @@ public class ConverterProperties {
         @DecimalMin("1.0") private double maxCoordinate = 1_000_000;
         @Min(0) @Max(10_000) private int maxWarnings = 500;
         @Min(0) private int maxOverlapChecks = 100_000;
+        @Min(16) @Max(65_536) private int maxFieldLength = 4_096;
+        @Min(64) private int maxMetadataCharacters = 250_000;
         public int getMaxBlocks() { return maxBlocks; } public void setMaxBlocks(int v) { maxBlocks=v; }
         public int getMaxDepth() { return maxDepth; } public void setMaxDepth(int v) { maxDepth=v; }
         public int getMaxTextLength() { return maxTextLength; } public void setMaxTextLength(int v) { maxTextLength=v; }
@@ -125,6 +127,8 @@ public class ConverterProperties {
         public double getMaxCoordinate() { return maxCoordinate; } public void setMaxCoordinate(double v) { maxCoordinate=v; }
         public int getMaxWarnings() { return maxWarnings; } public void setMaxWarnings(int v) { maxWarnings=v; }
         public int getMaxOverlapChecks() { return maxOverlapChecks; } public void setMaxOverlapChecks(int v) { maxOverlapChecks=v; }
+        public int getMaxFieldLength() { return maxFieldLength; } public void setMaxFieldLength(int v) { maxFieldLength=v; }
+        public int getMaxMetadataCharacters() { return maxMetadataCharacters; } public void setMaxMetadataCharacters(int v) { maxMetadataCharacters=v; }
     }
 
     public static class Pdf {

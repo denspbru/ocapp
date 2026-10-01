@@ -14,6 +14,10 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import java.util.stream.Stream;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriverException;
 
@@ -77,6 +81,55 @@ class DomPageExtractorTest {
         assertCode(()->DomPageExtractor.fromScriptResult(true,URI.create("https://x.test"),limits),"PAGEMODEL_EXTRACTION_FAILED");
         Map<String,Object> malformed=result(List.of(block("b0","TEXT","",0,0)),List.of()); malformed.put("geometry",Map.of("width",Double.NaN,"height",100d,"viewport",bounds(),"scrollX",0d,"scrollY",0d)); assertCode(()->DomPageExtractor.fromScriptResult(malformed,URI.create("https://x.test"),limits),"PAGEMODEL_INVALID");
         Map<String,Object> graph=result(List.of(block("b0","TEXT","missing",1,0)),List.of()); assertCode(()->DomPageExtractor.fromScriptResult(graph,URI.create("https://x.test"),limits),"PAGEMODEL_INVALID");
+    }
+
+    @Test void rejectsUnknownOrHostileScriptErrorsWithoutReflectingPageContent(){
+        assertThatThrownBy(()->DomPageExtractor.fromScriptResult(Map.of("error","hostile secret from page"),URI.create("https://x.test"),limits))
+            .isInstanceOf(ConversionException.class).extracting("code").isEqualTo("PAGEMODEL_EXTRACTION_FAILED");
+        assertThatThrownBy(()->DomPageExtractor.fromScriptResult(Map.of("error","hostile secret from page"),URI.create("https://x.test"),limits))
+            .hasMessageNotContaining("hostile").hasMessageNotContaining("secret");
+        assertThat(DomPageExtractor.SCRIPT).doesNotContain("fail(String(e))").contains("internalErrors.has(e)");
+    }
+
+    @Test void enforcesMetadataFieldBudgetsBeforeRecordMaterialization(){
+        limits.setMaxFieldLength(16);limits.setMaxMetadataCharacters(64);
+        Map<String,Object> hint=block("a","TEXT","",0,0);hint.put("hints",Map.of("keepTogether",false,"slide","x".repeat(17),"title","","notes","","layout","","render","AUTO"));assertLimit(result(List.of(hint),List.of()));
+        Map<String,Object> uri=block("a","TEXT","",0,0);uri.put("links",List.of(Map.of("text","x","target","https://x.test/"+"q".repeat(20))));assertLimit(result(List.of(uri),List.of()));
+        Map<String,Object> styled=block("a","TEXT","",0,0);Map<String,Object>s=new LinkedHashMap<>(style());s.put("fontFamily","s".repeat(17));styled.put("style",s);assertLimit(result(List.of(styled),List.of()));
+        Map<String,Object> doc=result(List.of(block("a","TEXT","",0,0)),List.of());doc.put("document",Map.of("title","t".repeat(17),"language","en"));assertLimit(doc);
+        assertThat(new DomPageExtractor(limits).limitMap()).containsEntry("field",16).containsEntry("metadata",64);
+    }
+
+    @ParameterizedTest @MethodSource("malformedModels")
+    void rejectsMalformedForestNumericAndSemanticModels(Map<String,Object> value){
+        assertCode(()->DomPageExtractor.fromScriptResult(value,URI.create("https://x.test"),limits),"PAGEMODEL_INVALID");
+    }
+
+    static Stream<Arguments> malformedModels(){
+        List<Arguments> out=new ArrayList<>();
+        Map<String,Object> duplicateRoots=result(List.of(block("a","TEXT","",0,0)),List.of());duplicateRoots.put("roots",List.of("a","a"));out.add(Arguments.of(duplicateRoots));
+        Map<String,Object> missingOwner=result(List.of(block("a","CONTAINER","",0,0),block("b","TEXT","a",1,1)),List.of());out.add(Arguments.of(missingOwner));
+        Map<String,Object> depth=result(List.of(block("a","CONTAINER","",0,0),block("b","TEXT","a",2,1)),List.of());
+        ((Map<String,Object>)((List<?>)depth.get("blocks")).get(0)).put("children",List.of("b"));out.add(Arguments.of(depth));
+        Map<String,Object> orders=result(List.of(block("a","TEXT","",0,0),block("b","TEXT","",0,0)),List.of());out.add(Arguments.of(orders));
+        Map<String,Object> overlap=result(List.of(block("a","TEXT","",0,0),block("b","TEXT","",0,1)),List.of());((Map<String,Object>)((List<?>)overlap.get("blocks")).get(0)).put("overlaps",List.of("b","b"));out.add(Arguments.of(overlap));
+        Map<String,Object> opacity=result(List.of(block("a","TEXT","",0,0)),List.of());Map<String,Object> os=new LinkedHashMap<>(style());os.put("opacity",1.5d);((Map<String,Object>)((List<?>)opacity.get("blocks")).get(0)).put("style",os);out.add(Arguments.of(opacity));
+        Map<String,Object> transform=result(List.of(block("a","TEXT","",0,0)),List.of());((Map<String,Object>)((List<?>)transform.get("blocks")).get(0)).put("transform",Map.of("transformed",true,"matrix","x","rotation",Double.POSITIVE_INFINITY,"scaleX",1d,"scaleY",1d));out.add(Arguments.of(transform));
+        Map<String,Object> table=result(List.of(block("a","TABLE","",0,0)),List.of());((Map<String,Object>)((List<?>)table.get("blocks")).get(0)).put("table",Map.of("rows",1,"columns",1,"cells",List.of(Map.of("row",0,"column",0,"rowSpan",2,"columnSpan",1,"header",false,"text","x"))));out.add(Arguments.of(table));
+        return out.stream();
+    }
+
+    @Test void fractionalIntegralFieldsAreMalformed(){
+        Map<String,Object> fractional=new LinkedHashMap<>(asset("x","IMAGE","https://x.test/a",1,false));fractional.put("bytes",1.5d);
+        Map<String,Object> value=result(List.of(block("a","TEXT","",0,0)),List.of(fractional));
+        assertCode(()->DomPageExtractor.fromScriptResult(value,URI.create("https://x.test"),limits),"PAGEMODEL_EXTRACTION_FAILED");
+    }
+
+    @Test void safeDiagnosticRedactsEveryPageControlledStringClass(){
+        Map<String,Object> b=block("a","TEXT","",0,0);Map<String,Object>s=new LinkedHashMap<>(style());s.put("fontFamily","SECRET_STYLE");b.put("style",s);b.put("transform",Map.of("transformed",true,"matrix","SECRET_MATRIX","rotation",0d,"scaleX",1d,"scaleY",1d));b.put("hints",Map.of("keepTogether",false,"slide","SECRET_HINT","title","","notes","","layout","","render","AUTO"));b.put("textRuns",List.of(Map.of("text","SECRET_TEXT","style",style())));b.put("table",null);
+        Map<String,Object> r=result(List.of(b),List.of());r.put("document",Map.of("title","SECRET_TITLE","language","SECRET_LANG"));r.put("capture",Map.of("userAgent","SECRET_UA","locale","SECRET_LOCALE","timezone","SECRET_TZ","dpr",1d,"readiness","SECRET_READY","observations",List.of("SECRET_OBS")));r.put("warnings",List.of(Map.of("code","SAFE_CODE","blockId","a","detail","SECRET_WARNING")));
+        String safe=PageModelDiagnostics.safeCanonicalJson(DomPageExtractor.fromScriptResult(r,URI.create("https://example.test/path?q=SECRET_QUERY#frag"),limits));
+        assertThat(safe).doesNotContain("SECRET_").doesNotContain("/path").doesNotContain("QUERY");
     }
 
     @Test void enforcesEveryConfiguredBudgetBeforeLargeModelMaterialization(){

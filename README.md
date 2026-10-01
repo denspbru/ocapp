@@ -116,6 +116,7 @@ converter.security.allow-private-addresses=true
 | `converter.page-model.max-assets` / `max-asset-bytes` | `2000` / `52428800` | Asset references и оценка embedded bytes |
 | `converter.page-model.max-coordinate` / `max-warnings` | `1000000` / `500` | Geometry и bounded diagnostics |
 | `converter.page-model.max-overlap-checks` | `100000` | Верхняя граница overlap comparisons |
+| `converter.page-model.max-field-length` / `max-metadata-characters` | `4096` / `250000` | Per-field и aggregate budgets для metadata, hints, URI, style и transform strings до materialization |
 
 Readiness всегда включает `document.readyState`, fonts, images, non-zero Canvas, DOM quiet и selector либо operator JS marker. PDF читается через bounded CDP stream. Base64 size проверяется до decode, PNG IHDR — до `ImageIO`, layout dimensions/pixels — до capture; PPTX PNG crops и final ZIP пишутся через bounded streams.
 

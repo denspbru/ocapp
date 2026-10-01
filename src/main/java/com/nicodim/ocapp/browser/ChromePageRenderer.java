@@ -114,9 +114,10 @@ public class ChromePageRenderer implements PageRenderer {
 
     private static void stopCdpObservers(DevTools devTools) {
         try {
+            // The browser session is closed immediately after rendering. Clearing listeners is
+            // sufficient and avoids racing a queued Fetch.requestPaused callback by disabling
+            // the domain while that callback is still sending continueRequest/fulfillRequest.
             devTools.clearListeners();
-            devTools.send(new Command<>("Fetch.disable", Map.of()));
-            devTools.send(new Command<>("Network.disable", Map.of()));
         } catch (RuntimeException ignored) { }
     }
 
