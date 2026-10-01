@@ -4,6 +4,6 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --create-home --uid 10001 ocapp
 WORKDIR /opt/ocapp
-COPY target/ocapp-0.1.jar app.jar
+COPY target/ocapp-0.1.1.jar app.jar
 USER 10001
 ENTRYPOINT ["java","-XX:MaxRAMPercentage=70","-jar","/opt/ocapp/app.jar"]

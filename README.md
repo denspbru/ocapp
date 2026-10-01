@@ -60,7 +60,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 Встроенный default — `converter.security.egress-mode=PROXY` с пустым `proxy-url`, поэтому приложение **намеренно не запускается**, пока validating proxy не настроен:
 
 ```bash
-java -jar target/ocapp-0.1.jar \
+java -jar target/ocapp-0.1.1.jar \
   --converter.security.proxy-url=http://proxy.internal:3128 \
   --converter.browser.binary=/usr/bin/chromium \
   --converter.browser.driver-path=/usr/bin/chromedriver
