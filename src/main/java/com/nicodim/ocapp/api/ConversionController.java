@@ -22,7 +22,7 @@ public class ConversionController {
 
     public ConversionController(ConversionOperations conversions) { this.conversions = conversions; }
 
-    @PostMapping(path = "/MakeSnapshot", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(path = {"/MakeMHTML", "/MakeSnapshot"}, consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> snapshot(@Valid @RequestBody ConversionRequest request) { return convert(request, OutputFormat.MHTML); }
 
     @PostMapping(path = "/MakePDF", consumes = MediaType.APPLICATION_JSON_VALUE)

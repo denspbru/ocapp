@@ -3,6 +3,8 @@ package com.nicodim.ocapp.security;
 import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.support.ConversionException;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -19,9 +21,22 @@ public class SecureRedirectResolver implements NavigationResolver {
 
     @Autowired
     public SecureRedirectResolver(UrlSecurityPolicy policy, ConverterProperties configuration) {
-        this(policy, configuration.getSecurity(), HttpClient.newBuilder()
-            .connectTimeout(configuration.getSecurity().getPreflightTimeout())
-            .followRedirects(HttpClient.Redirect.NEVER).build());
+        this(policy, configuration.getSecurity(), httpClient(configuration.getSecurity()));
+    }
+
+    private static HttpClient httpClient(ConverterProperties.Security properties) {
+        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(properties.getPreflightTimeout())
+            .followRedirects(HttpClient.Redirect.NEVER);
+        if (properties.getEgressMode() == ConverterProperties.Security.EgressMode.PROXY) {
+            URI proxy;
+            try { proxy = URI.create(properties.getProxyUrl()); }
+            catch (IllegalArgumentException ex) { throw new IllegalStateException("Invalid validating proxy URL", ex); }
+            if (!"http".equalsIgnoreCase(proxy.getScheme()) || proxy.getHost() == null) {
+                throw new IllegalStateException("PROXY egress requires an absolute HTTP validating proxy URL");
+            }
+            builder.proxy(ProxySelector.of(new InetSocketAddress(proxy.getHost(), proxy.getPort() < 0 ? 80 : proxy.getPort())));
+        }
+        return builder.build();
     }
 
     SecureRedirectResolver(UrlSecurityPolicy policy, ConverterProperties.Security properties, HttpClient client) {

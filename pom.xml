@@ -64,4 +64,26 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>real-browser</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId><version>3.5.4</version>
+            <configuration>
+              <useModulePath>false</useModulePath>
+              <includes><include>**/*E2EIT.java</include></includes>
+              <systemPropertyVariables>
+                <ocapp.e2e.failClosed>${ocapp.e2e.failClosed}</ocapp.e2e.failClosed>
+              </systemPropertyVariables>
+            </configuration>
+            <executions>
+              <execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

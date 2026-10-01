@@ -34,11 +34,17 @@ public class ConverterProperties {
         @NotNull @DurationMin(millis = 1) private Duration pageLoadTimeout = Duration.ofSeconds(30);
         @NotNull @DurationMin(millis = 1) private Duration scriptTimeout = Duration.ofSeconds(15);
         @NotNull @DurationMin(millis = 1) private Duration readinessTimeout = Duration.ofSeconds(15);
-        @NotNull @DurationMin(millis = 0) private Duration settleDelay = Duration.ofMillis(500);
+        @NotNull @DurationMin(millis = 0) private Duration domQuietPeriod = Duration.ofMillis(500);
+        @NotNull @DurationMin(millis = 0) private Duration settleDelay = Duration.ZERO;
+        private String readinessSelector = "body";
+        private String readinessScript = "";
         @Min(320) private int viewportWidth = 1440;
         @Min(200) private int viewportHeight = 900;
         @DecimalMin("0.1") private double deviceScaleFactor = 1.0;
         private boolean failStartupIfUnavailable;
+        @NotNull @DurationMin(millis = 1) private Duration cleanupTimeout = Duration.ofSeconds(5);
+        @NotNull @DurationMin(millis = 1) private Duration healthProbeTimeout = Duration.ofSeconds(10);
+        @NotNull @DurationMin(millis = 1) private Duration healthCacheTtl = Duration.ofSeconds(30);
         public String getBinary() { return binary; } public void setBinary(String v) { binary = v; }
         public String getDriverPath() { return driverPath; } public void setDriverPath(String v) { driverPath = v; }
         public boolean isHeadless() { return headless; } public void setHeadless(boolean v) { headless = v; }
@@ -46,34 +52,58 @@ public class ConverterProperties {
         public Duration getPageLoadTimeout() { return pageLoadTimeout; } public void setPageLoadTimeout(Duration v) { pageLoadTimeout = v; }
         public Duration getScriptTimeout() { return scriptTimeout; } public void setScriptTimeout(Duration v) { scriptTimeout = v; }
         public Duration getReadinessTimeout() { return readinessTimeout; } public void setReadinessTimeout(Duration v) { readinessTimeout = v; }
+        public Duration getDomQuietPeriod() { return domQuietPeriod; } public void setDomQuietPeriod(Duration v) { domQuietPeriod = v; }
         public Duration getSettleDelay() { return settleDelay; } public void setSettleDelay(Duration v) { settleDelay = v; }
+        public String getReadinessSelector() { return readinessSelector; } public void setReadinessSelector(String v) { readinessSelector = v; }
+        public String getReadinessScript() { return readinessScript; } public void setReadinessScript(String v) { readinessScript = v; }
         public int getViewportWidth() { return viewportWidth; } public void setViewportWidth(int v) { viewportWidth = v; }
         public int getViewportHeight() { return viewportHeight; } public void setViewportHeight(int v) { viewportHeight = v; }
         public double getDeviceScaleFactor() { return deviceScaleFactor; } public void setDeviceScaleFactor(double v) { deviceScaleFactor = v; }
         public boolean isFailStartupIfUnavailable() { return failStartupIfUnavailable; } public void setFailStartupIfUnavailable(boolean v) { failStartupIfUnavailable = v; }
+        public Duration getCleanupTimeout() { return cleanupTimeout; } public void setCleanupTimeout(Duration v) { cleanupTimeout = v; }
+        public Duration getHealthProbeTimeout() { return healthProbeTimeout; } public void setHealthProbeTimeout(Duration v) { healthProbeTimeout = v; }
+        public Duration getHealthCacheTtl() { return healthCacheTtl; } public void setHealthCacheTtl(Duration v) { healthCacheTtl = v; }
     }
+
     public static class Security {
+        public enum EgressMode { PROXY, UNSAFE }
         private List<String> allowedHosts = new ArrayList<>();
         private List<String> deniedHosts = new ArrayList<>();
         private boolean allowPrivateAddresses;
         @Min(0) @Max(20) private int maxRedirects = 5;
         @NotNull @DurationMin(millis = 1) private Duration preflightTimeout = Duration.ofSeconds(10);
+        @NotNull private EgressMode egressMode = EgressMode.PROXY;
+        private String proxyUrl = "";
+        private boolean unsafeAcknowledgeRisk;
         public List<String> getAllowedHosts() { return allowedHosts; } public void setAllowedHosts(List<String> v) { allowedHosts = v; }
         public List<String> getDeniedHosts() { return deniedHosts; } public void setDeniedHosts(List<String> v) { deniedHosts = v; }
         public boolean isAllowPrivateAddresses() { return allowPrivateAddresses; } public void setAllowPrivateAddresses(boolean v) { allowPrivateAddresses = v; }
         public int getMaxRedirects() { return maxRedirects; } public void setMaxRedirects(int v) { maxRedirects = v; }
         public Duration getPreflightTimeout() { return preflightTimeout; } public void setPreflightTimeout(Duration v) { preflightTimeout = v; }
+        public EgressMode getEgressMode() { return egressMode; } public void setEgressMode(EgressMode v) { egressMode = v; }
+        public String getProxyUrl() { return proxyUrl; } public void setProxyUrl(String v) { proxyUrl = v; }
+        public boolean isUnsafeAcknowledgeRisk() { return unsafeAcknowledgeRisk; } public void setUnsafeAcknowledgeRisk(boolean v) { unsafeAcknowledgeRisk = v; }
     }
+
     public static class Limits {
         @Min(1) private int maxConcurrent = 2;
         @NotNull @DurationMin(millis = 1) private Duration acquireTimeout = Duration.ofMillis(100);
         @NotNull @DurationMin(millis = 1) private Duration operationTimeout = Duration.ofSeconds(90);
         @Min(1024) private long maxOutputBytes = 50L * 1024 * 1024;
+        @Min(320) private int maxCaptureWidth = 10_000;
+        @Min(200) private int maxCaptureHeight = 50_000;
+        @Min(1) private long maxCapturePixels = 100_000_000L;
+        @Min(1024) private long maxScreenshotBytes = 50L * 1024 * 1024;
         public int getMaxConcurrent() { return maxConcurrent; } public void setMaxConcurrent(int v) { maxConcurrent = v; }
         public Duration getAcquireTimeout() { return acquireTimeout; } public void setAcquireTimeout(Duration v) { acquireTimeout = v; }
         public Duration getOperationTimeout() { return operationTimeout; } public void setOperationTimeout(Duration v) { operationTimeout = v; }
         public long getMaxOutputBytes() { return maxOutputBytes; } public void setMaxOutputBytes(long v) { maxOutputBytes = v; }
+        public int getMaxCaptureWidth() { return maxCaptureWidth; } public void setMaxCaptureWidth(int v) { maxCaptureWidth = v; }
+        public int getMaxCaptureHeight() { return maxCaptureHeight; } public void setMaxCaptureHeight(int v) { maxCaptureHeight = v; }
+        public long getMaxCapturePixels() { return maxCapturePixels; } public void setMaxCapturePixels(long v) { maxCapturePixels = v; }
+        public long getMaxScreenshotBytes() { return maxScreenshotBytes; } public void setMaxScreenshotBytes(long v) { maxScreenshotBytes = v; }
     }
+
     public static class Pdf {
         private boolean landscape;
         @DecimalMin("1.0") private double paperWidthInches = 8.27;
@@ -84,6 +114,7 @@ public class ConverterProperties {
         public double getPaperHeightInches() { return paperHeightInches; } public void setPaperHeightInches(double v) { paperHeightInches = v; }
         public double getMarginInches() { return marginInches; } public void setMarginInches(double v) { marginInches = v; }
     }
+
     public static class Pptx {
         @DecimalMin("1.0") private double slideWidthInches = 13.333;
         @DecimalMin("1.0") private double slideHeightInches = 7.5;

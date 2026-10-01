@@ -1,0 +1,45 @@
+services:
+  proxy:
+    image: ubuntu/squid:6.10-24.10_edge
+    restart: unless-stopped
+    volumes:
+      - ./squid.conf:/etc/squid/squid.conf:ro
+    networks:
+      - browser_boundary
+      - public_egress
+    mem_limit: 256m
+    read_only: true
+    tmpfs:
+      - /var/log/squid
+      - /var/spool/squid
+      - /run
+
+  ocapp:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - proxy
+    ports:
+      - "8088:8088"
+    networks:
+      - browser_boundary
+    mem_limit: 1g
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    environment:
+      CONVERTER_SECURITY_EGRESS_MODE: PROXY
+      CONVERTER_SECURITY_PROXY_URL: http://proxy:3128
+      CONVERTER_BROWSER_BINARY: /usr/bin/chromium
+      CONVERTER_BROWSER_DRIVER_PATH: /usr/bin/chromedriver
+      CONVERTER_BROWSER_FAIL_STARTUP_IF_UNAVAILABLE: "true"
+      CONVERTER_LIMITS_MAX_OUTPUT_BYTES: "52428800"
+      CONVERTER_LIMITS_MAX_SCREENSHOT_BYTES: "52428800"
+      CONVERTER_LIMITS_MAX_CAPTURE_PIXELS: "100000000"
+
+networks:
+  browser_boundary:
+    internal: true
+  public_egress: {}

@@ -25,12 +25,12 @@ class UrlSecurityPolicyTest {
     @Test void acceptsPublicHttpUrlNormalizesPathAndBuildsSafeOrigin() {
         UrlSecurityPolicy policy = policy("93.184.216.34");
         var uri = policy.validate("https://Example.org/a/../b?secret=x#fragment");
-        assertThat(uri.toString()).isEqualTo("https://Example.org/b?secret=x#fragment");
+        assertThat(uri.toString()).isEqualTo("https://example.org/b?secret=x#fragment");
         assertThat(policy.safeOrigin(uri)).isEqualTo("https://example.org");
     }
 
     @Test void rejectsBlankLongMalformedSchemeCredentialsHostAndPort() {
-        for (String value : new String[]{null, " ", "file:///etc/passwd", "data:text/plain,x", "http://user:pass@example.org", "http:///x", "http://[:::1]", "http://example.org:99999"}) {
+        for (String value : new String[]{null, " ", "file:///etc/passwd", "data:text/plain,x", "http://user:pass@example.org", "http:///x", "http://[:::1]", "http://example.org:99999", "http://example.org:not-a-port"}) {
             assertBlocked(value, "INVALID_URL");
         }
         assertBlocked("https://example.org/" + "x".repeat(4097), "INVALID_URL");
@@ -76,10 +76,19 @@ class UrlSecurityPolicyTest {
         assertThat(HostResolver.system().resolve("localhost")).isNotEmpty();
     }
 
-    @Test void patternMatchingIsCaseInsensitiveAndRejectsFalseSuffixes() {
-        assertThat(UrlSecurityPolicy.matches("a.example.org", List.of("*.EXAMPLE.ORG"))).isTrue();
-        assertThat(UrlSecurityPolicy.matches("example.org", List.of("*.example.org"))).isFalse();
+    @Test void patternMatchingCanonicalizesCaseTerminalDotsAndIdn() {
+        assertThat(UrlSecurityPolicy.matches("a.example.org..", List.of("*.EXAMPLE.ORG."))).isTrue();
+        assertThat(UrlSecurityPolicy.matches("example.org.", List.of("*.example.org.."))).isFalse();
         assertThat(UrlSecurityPolicy.matches("badexample.org", List.of("*.example.org"))).isFalse();
+        assertThat(UrlSecurityPolicy.matches("xn--e1afmkfd.xn--p1ai", List.of("пример.рф."))).isTrue();
+    }
+
+    @Test void requestHostsAndPatternsShareCanonicalIdnAndMultipleDotRules() {
+        properties.setAllowedHosts(List.of("*.пример.рф.."));
+        UrlSecurityPolicy policy = policy("93.184.216.34");
+        assertThat(policy.validate("https://www.пример.рф.../x").getHost()).isEqualTo("www.xn--e1afmkfd.xn--p1ai");
+        properties.setDeniedHosts(List.of("www.xn--e1afmkfd.xn--p1ai."));
+        assertBlocked(policy, "https://www.пример.рф./x", "URL_NOT_ALLOWED");
     }
 
     private void assertBlocked(String value, String code) { assertBlocked(policy("93.184.216.34"), value, code); }

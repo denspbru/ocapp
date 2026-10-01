@@ -39,10 +39,10 @@ class ChromePageRendererTest {
 
     @Test void rejectsUnreadableScreenshotAndSlideOverflow() {
         assertThatThrownBy(() -> renderer.createPresentation(new byte[]{1, 2, 3}))
-            .isInstanceOf(ConversionException.class).extracting("code").isEqualTo("PPTX_CREATION_FAILED");
+            .isInstanceOf(ConversionException.class).extracting("code").isEqualTo("INVALID_SCREENSHOT");
         properties.getPptx().setMaxSlides(1);
         assertThatThrownBy(() -> renderer.createPresentation(png(100, 1000)))
-            .isInstanceOf(ConversionException.class).extracting("code").isEqualTo("TOO_MANY_SLIDES");
+            .isInstanceOf(ConversionException.class).extracting("code").isEqualTo("OUTPUT_TOO_LARGE");
     }
 
     @Test void validatesRealisticMhtmlPdfAndPptxSignatures() throws Exception {
@@ -51,6 +51,13 @@ class ChromePageRendererTest {
         ChromePageRenderer.validateArtifact(mhtml, OutputFormat.MHTML);
         ChromePageRenderer.validateArtifact(pdf, OutputFormat.PDF);
         ChromePageRenderer.validateArtifact(renderer.createPresentation(png(10, 10)), OutputFormat.PPTX);
+    }
+
+    @Test void rejectsOversizedPngFromIhdrBeforeImageIoAllocation() throws Exception {
+        byte[] image = png(10, 10);
+        image[16] = 0; image[17] = 1; image[18] = (byte) 0x86; image[19] = (byte) 0xa0;
+        assertThatThrownBy(() -> renderer.createPresentation(image))
+            .isInstanceOf(ConversionException.class).extracting("code").isEqualTo("OUTPUT_TOO_LARGE");
     }
 
     @Test void rejectsEmptyTruncatedAndMislabeledArtifacts() {

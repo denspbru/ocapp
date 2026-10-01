@@ -35,6 +35,7 @@ class ConversionControllerTest {
     }
 
     @Test void returnsEachFormatWithSafeDownloadHeaders() throws Exception {
+        expectSuccess("/MakeMHTML", OutputFormat.MHTML, "example.mhtml");
         expectSuccess("/MakeSnapshot", OutputFormat.MHTML, "example.mhtml");
         expectSuccess("/MakePDF", OutputFormat.PDF, "example.pdf");
         expectSuccess("/MakePPTX", OutputFormat.PPTX, "example.pptx");

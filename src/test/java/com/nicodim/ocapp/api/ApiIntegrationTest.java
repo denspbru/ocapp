@@ -1,5 +1,6 @@
 package com.nicodim.ocapp.api;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import com.nicodim.ocapp.support.CorrelationIdFilter;
@@ -9,7 +10,10 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+    "converter.security.egress-mode=UNSAFE",
+    "converter.security.unsafe-acknowledge-risk=true"
+})
 @AutoConfigureMockMvc
 class ApiIntegrationTest {
     @Autowired MockMvc mvc;
@@ -22,5 +26,14 @@ class ApiIntegrationTest {
             .andExpect(header().string(CorrelationIdFilter.HEADER, "integration-123"))
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
             .andExpect(jsonPath("$.correlationId").value("integration-123"));
+    }
+
+    @Test void preservesFramework404MethodAndMediaTypeStatusesAndAllowHeader() throws Exception {
+        mvc.perform(get("/missing")).andExpect(status().isNotFound()).andExpect(jsonPath("$.status").value(404));
+        mvc.perform(get("/MakePDF")).andExpect(status().isMethodNotAllowed())
+            .andExpect(header().string("Allow", org.hamcrest.Matchers.containsString("POST")))
+            .andExpect(jsonPath("$.status").value(405));
+        mvc.perform(post("/MakePDF").contentType("text/plain").content("x"))
+            .andExpect(status().isUnsupportedMediaType()).andExpect(jsonPath("$.status").value(415));
     }
 }

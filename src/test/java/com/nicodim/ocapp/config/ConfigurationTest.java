@@ -60,6 +60,7 @@ class ConfigurationTest {
         if (type == double.class) return 2.5d;
         if (type == Duration.class) return Duration.ofSeconds(2);
         if (type == List.class) return List.of("value");
+        if (type.isEnum()) return type.getEnumConstants()[type.getEnumConstants().length - 1];
         throw new AssertionError("Unsupported property type " + type);
     }
 }

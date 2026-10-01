@@ -32,6 +32,10 @@ class SecureRedirectResolverTest {
 
     @Test void springConstructorBuildsNoFollowHttpClient() {
         ConverterProperties root = new ConverterProperties();
+        root.getSecurity().setEgressMode(ConverterProperties.Security.EgressMode.UNSAFE);
+        assertThat(new SecureRedirectResolver(policy, root)).isNotNull();
+        root.getSecurity().setEgressMode(ConverterProperties.Security.EgressMode.PROXY);
+        root.getSecurity().setProxyUrl("http://proxy.example:3128");
         assertThat(new SecureRedirectResolver(policy, root)).isNotNull();
     }
 

@@ -1,82 +1,75 @@
 # Бизнес-требования: сервис конвертации веб-страниц
 
-## 1. Назначение
+## 1. Назначение и область
 
-Сервис предоставляет клиентским системам единый HTTP API для сохранения динамической веб-страницы в MHTML, PDF или PPTX. Результат возвращается непосредственно в ответе и после запроса на сервере не хранится.
+Сервис возвращает итоговое состояние динамической страницы как MHTML, PDF или image-based PPTX без server-side хранения результата. В scope: JavaScript/Canvas/SVG/ECharts, bounded readiness/resources, SSRF defense, enforced production egress proxy, correlation/health. Не входят UI, batch/scheduling, editable PPTX DOM objects, CAPTCHA/DRM/auth bypass, client cookies/Authorization.
 
-## 2. Ценность и область
+## 2. API
 
-Сервис автоматизирует архивирование, печать и включение итогового визуального состояния веб-страниц (включая JavaScript, Canvas/SVG и ECharts) в презентации. Поставляется как автономный исполняемый JAR для headless-инфраструктуры.
+Все операции — `POST`, `Content-Type: application/json`, body `{"url":"https://example.org/report"}`.
 
-В область входят: загрузка URL, ожидание готовности, формирование файла, защита от SSRF, контролируемые лимиты, журналирование и health/readiness. Не входят: UI, расписание и пакетные задания, редактируемые DOM-элементы в PPTX, обход CAPTCHA/DRM/антибот-защиты, хранение результатов и передача клиентских cookies/Authorization.
-
-## 3. API
-
-Все операции используют `POST`, `Content-Type: application/json` и тело:
-
-```json
-{"url":"https://example.org/report"}
-```
-
-| Операция | Результат | Content-Type |
+| Операция | Статус | Результат |
 |---|---|---|
-| `/MakeSnapshot` | MHTML (`.mhtml`) | `application/x-mimearchive` |
-| `/MakePDF` | PDF (`.pdf`) | `application/pdf` |
-| `/MakePPTX` | PPTX (`.pptx`) | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+| `/MakeMHTML` | canonical | MHTML / `application/x-mimearchive` |
+| `/MakeSnapshot` | compatibility alias | MHTML / `application/x-mimearchive` |
+| `/MakePDF` | canonical | PDF / `application/pdf` |
+| `/MakePPTX` | canonical | PPTX / OOXML presentation MIME |
 
-Успешный ответ имеет `200`, бинарное тело, точный `Content-Length`, безопасный `Content-Disposition: attachment` и `X-Correlation-ID`. Имя файла состоит только из очищенного host, UTC timestamp и расширения.
+Успех имеет `200`, binary body, точный `Content-Length`, safe attachment filename и correlation ID. Framework errors сохраняют `404`, `405`/`Allow`, `415`; unexpected exception становится sanitized `500`. Problem JSON не раскрывает stack/path/query/document/credentials.
 
-Ошибка возвращается как `application/problem+json` с полями `type`, `title`, `status`, `code`, `detail`, `correlationId`, `timestamp`. Детали не раскрывают stack trace, локальные пути, query/fragment URL, cookies и секреты.
+## 3. Реализованные функциональные требования M0
 
-## 4. Функциональные требования
+- **FR-001:** обязательный absolute HTTP(S) URL до 4096 chars, без user-info.
+- **FR-002:** request host и exact/wildcard patterns canonicalized одинаково: IDNA ASCII, lowercase, удаление всех terminal dots.
+- **FR-003:** все DNS answers проверяются; private/loopback/link-local/multicast/unspecified/CGNAT/metadata запрещены, если application private mode не включён.
+- **FR-004:** HEAD redirect preflight no-follow; browser GET status/redirect chain измеряются отдельно из Chromium performance events. Final 4xx/5xx и overflow redirect limit отклоняются до capture.
+- **FR-005:** production startup fail-closed без validating HTTP proxy. Chromium proxy bypass/DNS/QUIC/non-proxied WebRTC закрыты; Java preflight использует тот же proxy. Application checks остаются defense in depth.
+- **FR-006:** отдельный `UNSAFE` mode требует acknowledgement и предназначен только для trusted local E2E.
+- **FR-007:** readiness bounded и включает base document readiness, fonts/images/Canvas, DOM quiet и selector либо trusted operator JS marker.
+- **FR-008:** MHTML — CDP snapshot; PDF — bounded CDP stream; PPTX — bounded full-page PNG slices и Apache POI.
+- **FR-009:** layout dimensions/pixels, base64 decoded size, PNG IHDR, screenshot/output bytes и slide count проверяются до соответствующих дорогих allocations, где API это позволяет; overflow даёт controlled `413`.
+- **FR-010:** atomic queued/running/cancelling/finished ownership исключает start после queued cancel; отдельный atomic browser-start lifecycle закрывает race до/во время driver startup. Timeout выполняет bounded Selenium cleanup и graceful/forced termination same-user process tree; permits освобождаются владельцем после cleanup resolution.
+- **FR-011:** startup failure закрывает driver/service/profile; оба configured executables валидируются.
+- **FR-012:** readiness health bounded, cached single-flight, реально открывает/закрывает browser, cancellable на startup и входит в readiness group.
+- **FR-013:** stable Problem codes, correlation ID и safe logs.
 
-- **FR-001:** принимать ровно один URL на операцию; URL обязателен, абсолютен и не длиннее 4096 символов.
-- **FR-002:** разрешать только HTTP/HTTPS без user-info; `file`, `data`, `javascript` и иные схемы запрещены.
-- **FR-003:** проверять host и все DNS-адреса, запрещая loopback, private/site-local, link-local, multicast, unspecified, carrier-grade NAT и metadata-сети; allow/deny host policy конфигурируется.
-- **FR-004:** проверять каждое серверное перенаправление до перехода и ограничивать их количество. Фактические browser requests, включая навигацию, redirects и HTTP(S)-подресурсы, перехватываются и проходят URL/DNS policy; top-level URL повторно проверяется до и после capture.
-- **FR-005:** запускать изолированную браузерную сессию на запрос, выполнять JavaScript и ждать `document.readyState`, шрифты, изображения и Canvas с последующей стабилизационной задержкой.
-- **FR-006:** MHTML формировать через Chrome DevTools `Page.captureSnapshot`.
-- **FR-007:** PDF формировать через Chrome DevTools `Page.printToPDF` с фоном и конфигурируемыми страницей/полями.
-- **FR-008:** PPTX формировать Apache POI из полноразмерного PNG, последовательно разрезая длинную страницу на слайды без пропусков.
-- **FR-009:** при успехе, ошибке, таймауте и прерывании закрывать WebDriver/Chromium и удалять временный профиль.
-- **FR-010:** ограничивать одновременно выполняемые конвертации, время ожидания ёмкости, полное время операции и размер результата.
-- **FR-011:** возвращать стабильные коды ошибок для невалидного запроса/URL, запрещённого URL, недоступной цели, таймаута, исчерпания ёмкости, сбоя браузера и конвертации.
-- **FR-012:** присваивать или принимать безопасный correlation ID и использовать его в ответе и структурированных журналах.
+## 4. Нефункциональные требования
 
-## 5. Нефункциональные требования
+- Java 21, Spring Boot/Undertow, Selenium/Chromium CDP, Apache POI; executable JAR.
+- Default port 8088; external config via `--config`.
+- Headless browser process/profile per request; compatible browser/driver installed externally.
+- Bounded concurrency, acquire/preflight/page/script/readiness/operation/cleanup/health timeouts.
+- JVM/container memory and `/tmp` limits обязательны; starting deployment example: app 1 GiB, tmpfs 256 MiB, `max-concurrent=2`, output/screenshot 50 MiB, capture 100M pixels.
+- Unit/integration suite no external network. Dedicated Failsafe browser profile uses only loopback fixture and skips clearly when local browser pair unavailable.
+- JaCoCo instruction/line ≥90%, branch ≥70%, method/class 100%; tests assert behavior, not invocation alone.
 
-- Java 21, Spring Boot, встроенный Undertow, Selenium/Chromium DevTools, Apache POI.
-- Исполняемый JAR; порт по умолчанию `8088`.
-- Настройки встроены в JAR; `--config=/absolute/path/config.properties` подключает внешний properties с более высоким приоритетом.
-- Работа в headless-режиме. Chromium/Chrome физически не упакован в JAR: браузер должен быть установлен в среде исполнения. При пустых `converter.browser.binary` и `converter.browser.driver-path` Selenium Manager обнаруживает браузер и подбирает/разрешает driver; для воспроизводимого production-развёртывания оператор явно задаёт совместимые пути к browser binary и ChromeDriver.
-- Управляемые page-load/script/readiness/preflight/operation timeout, конкурентность и размер результата.
-- Graceful shutdown и Actuator health/liveness/readiness без запуска конвертации.
-- Логи по умолчанию в консоль; полный URL и содержимое файлов не журналируются.
-- Unit/integration tests не используют внешнюю сеть; браузерный smoke выполняется локально при наличии Chrome.
+## 5. HTTP status policy
 
-## 6. HTTP-коды
-
-| Код | Условие |
+| HTTP | Условие |
 |---:|---|
-| 200 | файл сформирован |
-| 400 | неверный JSON, URL или схема |
-| 403 | URL/redirect запрещён SSRF-политикой |
-| 413 | результат превышает лимит |
-| 422 | цель недоступна либо не может быть обработана |
-| 429 | конкурентная ёмкость исчерпана (`Retry-After`) |
-| 500 | непредвиденная внутренняя ошибка |
-| 503 | браузер недоступен |
-| 504 | таймаут/прерывание |
+| 200 | artifact сформирован |
+| 400 | invalid JSON/request/URL |
+| 403 | URL/request/redirect/subresource blocked |
+| 404/405/415 | preserved Spring MVC protocol error |
+| 413 | dimensions/pixels/decoded bytes/output/slides limit |
+| 422 | unreachable target, browser GET 4xx/5xx, invalid navigation/artifact |
+| 429 | capacity exhausted; `Retry-After: 1` |
+| 500 | только unexpected internal error |
+| 503 | browser/executor unavailable |
+| 504 | operation/readiness/cancellation timeout |
 
-## 7. Критерии приёмки
+## 6. Критерии приёмки M0
 
-1. `mvn test` и `mvn package` успешны на Java 21; JAR запускается на заданном свободном порту с Undertow.
-2. Три маршрута принимают контрактный JSON и при подменённом renderer возвращают корректные заголовки/формат ошибок без сети.
-3. Небезопасные схемы, credentials, loopback/private/link-local/multicast и запрещённые hosts отклоняются тестами.
-4. Redirect resolver не следует редиректам автоматически и валидирует следующий URL до запроса.
-5. Таймауты, лимит конкурентности, безопасные имена и cleanup покрыты тестируемыми компонентами.
-6. При доступном Chrome локальная smoke-страница формируется в MHTML/PDF/PPTX; артефакты имеют ожидаемые сигнатуры.
+1. Canonical `/MakeMHTML` и alias `/MakeSnapshot` имеют одинаковый tested contract.
+2. Default app не стартует без valid proxy config; deployment example блокирует private destinations после DNS для HTTP/CONNECT/WebSocket paths.
+3. Oversized layout/base64/PNG/PPTX/output завершается controlled `413`, не неконтролируемой JVM allocation в application code.
+4. Deterministic latch tests доказывают no-start-after-cancel, forced-close и permit ownership.
+5. Dotted/IDN exact/wildcard rules и localhost private on/off покрыты.
+6. 404/405/415 headers/status, top-level browser GET errors и independent browser redirect limit покрыты.
+7. Missing/incompatible/partial browser startup и bounded cached readiness probe покрыты.
+8. Local real-browser profile проверяет signatures/headers/cleanup, фактический delayed Canvas в MHTML/PPTX, GET redirects при HEAD 200, real/late GET 4xx/5xx и blocked private subresource.
+9. `mvn clean verify`, browser profile при наличии Chromium и `git diff --check` успешны.
 
-## 8. Ограничения
+## 7. Ограничения
 
-Качество зависит от Chromium, шрифтов, CSP, доступности ресурсов и поведения страницы. DevTools interception проверяет URL/DNS browser-подресурсов, но не связывает проверенный Java DNS-ответ с фактическим socket Chromium и потому не устраняет DNS rebinding/TOCTOU полностью. Production-развёртывание должно дополнительно ограничивать исходящую сеть контейнером/firewall либо validating proxy. Аутентифицированные страницы и клиентские credentials не поддерживаются.
+Validating proxy/deployment boundary остаётся operator-controlled security component; приложение не может доказать host firewall isolation. Process supervisor может завершать только дочерние процессы того же OS user, поэтому container PID/cgroup supervision остаётся дополнительным рубежом. Squid example требует сопровождения ACL и cloud-specific ranges. MHTML CDP возвращает готовый String до application byte limit; Selenium/ImageIO/POI имеют внутренние allocations, поэтому hard container memory limit обязателен. PPTX raster-only. Custom readiness script доверенный operator config. Качество зависит от browser/fonts/CSP/locale и поведения страницы.

@@ -38,20 +38,20 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код ветки `main` на дату этого документа. Будущие компоненты из последующих разделов ещё не являются текущим контрактом.
+Ниже описан код после M0 hardening на дату этого документа. Будущие компоненты из последующих разделов ещё не являются текущим контрактом.
 
 ### HTTP и orchestration
 
 - [`ConversionController.pptx(...)`](../src/main/java/com/nicodim/ocapp/api/ConversionController.java#L31-L32) обслуживает `POST /MakePPTX` и передаёт запрос общему conversion layer. Поля режима PPTX в request сейчас отсутствуют.
-- [`ConversionService.convert(...)`](../src/main/java/com/nicodim/ocapp/conversion/ConversionService.java#L53-L109) ограничивает concurrency, запускает preflight и render в executor, применяет общий operation timeout и формирует результат.
-- [`PageRenderer.render(...)`](../src/main/java/com/nicodim/ocapp/conversion/PageRenderer.java#L5-L8) — текущая граница browser/rendering adapter. Она принимает только `URI` и `OutputFormat` и возвращает готовый `byte[]`; промежуточной модели страницы нет.
+- [`ConversionService.convert(...)`](../src/main/java/com/nicodim/ocapp/conversion/ConversionService.java) ограничивает concurrency, запускает preflight и render в executor, применяет общий operation timeout и формирует результат. Atomic ownership state исключает browser start после queued cancellation; running timeout вызывает `RenderContext.cancel()` и ждёт bounded cleanup.
+- [`PageRenderer.render(...)`](../src/main/java/com/nicodim/ocapp/conversion/PageRenderer.java) — текущая cancellation-aware граница browser/rendering adapter. Она принимает `URI`, `OutputFormat` и опциональный `RenderContext`, возвращает готовый `byte[]`; промежуточной модели страницы пока нет.
 
 ### Browser extraction и готовность страницы
 
-- [`BrowserFactory.open()`](../src/main/java/com/nicodim/ocapp/browser/BrowserFactory.java#L28-L60) создаёт отдельный ChromeDriver и временный browser profile, задаёт viewport/device scale и browser timeouts.
-- [`ChromePageRenderer.render(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java#L47-L77) выполняет navigation, проверку URL, ожидание готовности, capture, валидацию сигнатуры и проверку итогового размера.
-- [`ChromePageRenderer.installRequestGuard(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java#L79-L93) проверяет HTTP(S)-запросы Chromium через `UrlSecurityPolicy`; это defense in depth, но не полноценная сетевая изоляция.
-- [`ChromePageRenderer.waitUntilReady(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java#L100-L116) ждёт `document.readyState`, fonts, images и ненулевые Canvas, затем применяет фиксированный settle delay. Network-idle, DOM quiet, custom marker и полноценная готовность delayed ECharts пока не поддержаны.
+- [`BrowserFactory.open()`](../src/main/java/com/nicodim/ocapp/browser/BrowserFactory.java) создаёт ChromeDriver/service/profile, применяет fail-closed proxy/DNS/QUIC/WebRTC policy и очищает каждый partial startup failure.
+- [`ChromePageRenderer.render(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) проверяет фактический browser GET status и redirect chain, readiness и layout bounds до capture.
+- [`ChromePageRenderer.installRequestGuard(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) проверяет HTTP(S)-запросы как defense in depth; production network boundary реализуется validating proxy deployment-ом.
+- [`ChromePageRenderer.waitUntilReady(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) ждёт base readiness, DOM quiet и configurable selector/operator JS marker; delayed ECharts/Canvas может явно сигнализировать завершение.
 
 ### Текущий PPTX renderer
 
@@ -64,9 +64,9 @@ Chromium остаётся источником истины для вычисл�
 ### Безопасность, ресурсы и тесты
 
 - [`UrlSecurityPolicy.validate(...)`](../src/main/java/com/nicodim/ocapp/security/UrlSecurityPolicy.java#L27-L51) ограничивает URL, host и resolved addresses; [`SecureRedirectResolver.resolve(...)`](../src/main/java/com/nicodim/ocapp/security/SecureRedirectResolver.java#L31-L54) выполняет HEAD preflight с ограничением redirect-ов.
-- [`BrowserSession.close()`](../src/main/java/com/nicodim/ocapp/browser/BrowserSession.java#L19-L22) вызывает `driver.quit()` и удаляет временный profile.
-- [`ChromePageRendererTest.createsValidMultiSlidePresentationWithoutNetwork()`](../src/test/java/com/nicodim/ocapp/browser/ChromePageRendererTest.java#L31-L38) проверяет текущую image-based pagination без реального браузера.
-- [`ChromePageRendererFlowTest.rendersAndValidatesAllThreeFormatsThroughSeleniumApis()`](../src/test/java/com/nicodim/ocapp/browser/ChromePageRendererFlowTest.java#L65-L78) проверяет Selenium flow через mocks. Отдельного воспроизводимого профиля с реальным Chromium в CI пока нет.
+- [`BrowserSession`](../src/main/java/com/nicodim/ocapp/browser/BrowserSession.java) линеаризует startup/cancel, bounded выполняет quit/service stop, затем graceful/forced termination same-user process tree и profile cleanup; `RenderContext` регистрирует forced-close hook.
+- Layout/pixel/base64/PNG IHDR/output/slide limits применяются до соответствующих дорогих application allocations; PDF читается bounded CDP stream. MHTML CDP всё ещё возвращает готовый `String`, что документировано как ограничение.
+- Unit tests проверяют image pagination, limits, races и Selenium flow; Failsafe [`RealBrowserE2EIT`](../src/test/java/com/nicodim/ocapp/RealBrowserE2EIT.java) запускает local-only Chromium MHTML/PDF/PPTX, доказывает delayed marker/canvas в artifacts, browser redirects, real/late GET errors и blocked subresource.
 
 ## 3. Целевая архитектура
 
@@ -162,7 +162,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M0 — hardening foundation
 
-- **Status:** planned
+- **Status:** done in `openclaw/m0-hardening` (issue closure/release остаются отдельным parent action)
 - **Target version:** `0.1.x`
 - **Issues:** [#3 — bounded rendering memory](https://github.com/denspbru/ocapp/issues/3), [#4 — deny-by-default Chromium egress](https://github.com/denspbru/ocapp/issues/4), [#5 — race-safe cancellation/cleanup](https://github.com/denspbru/ocapp/issues/5), [#8 — Chrome startup cleanup/readiness](https://github.com/denspbru/ocapp/issues/8), [#9 — readiness/redirect limits](https://github.com/denspbru/ocapp/issues/9), [#10 — real Chromium E2E](https://github.com/denspbru/ocapp/issues/10)
 - **Dependencies:** текущий `0.1` baseline; для egress — выбранная deployment boundary.
@@ -175,7 +175,7 @@ Visual и editable modes полностью локальны и детермин
   - delayed Canvas/ECharts и browser GET redirect chain проходят bounded readiness/redirect tests;
   - отдельный Maven profile выполняет MHTML/PDF/PPTX через реальный Chromium и локальные fixtures без внешней сети.
 
-Общий backlog `0.1.x`, обязательный для production readiness, но не блокирующий проектирование PageModel целиком: [#2 — MHTML endpoint contract](https://github.com/denspbru/ocapp/issues/2), [#6 — hostname canonicalization/private-address behavior](https://github.com/denspbru/ocapp/issues/6), [#7 — HTTP protocol errors/final navigation status](https://github.com/denspbru/ocapp/issues/7). Эти issues должны быть закрыты до объявления `0.1.x` hardening complete.
+Смежный M0 scope также реализует [#2 — canonical `/MakeMHTML` + alias](https://github.com/denspbru/ocapp/issues/2), [#6 — IDN/terminal-dot canonicalization и private-address behavior](https://github.com/denspbru/ocapp/issues/6), [#7 — preserved protocol errors и browser GET status](https://github.com/denspbru/ocapp/issues/7). GitHub issues намеренно не закрываются этой рабочей веткой до parent review.
 
 ### M1 — PageModel и DOM extraction
 
