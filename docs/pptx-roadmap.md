@@ -1,6 +1,6 @@
 # Roadmap интеллектуальной PPTX-конвертации
 
-Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-09-30.
+Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-02.
 
 ## 1. Цель и границы
 
@@ -163,8 +163,8 @@ Visual и editable modes полностью локальны и детермин
 
 ### M0 — hardening foundation
 
-- **Status:** done in `openclaw/m0-hardening` (issue closure/release остаются отдельным parent action)
-- **Target version:** `0.1.x`
+- **Status:** released in `v0.1.1`; все связанные issues закрыты
+- **Target version:** `0.1.1`
 - **Issues:** [#3 — bounded rendering memory](https://github.com/denspbru/ocapp/issues/3), [#4 — deny-by-default Chromium egress](https://github.com/denspbru/ocapp/issues/4), [#5 — race-safe cancellation/cleanup](https://github.com/denspbru/ocapp/issues/5), [#8 — Chrome startup cleanup/readiness](https://github.com/denspbru/ocapp/issues/8), [#9 — readiness/redirect limits](https://github.com/denspbru/ocapp/issues/9), [#10 — real Chromium E2E](https://github.com/denspbru/ocapp/issues/10)
 - **Dependencies:** текущий `0.1` baseline; для egress — выбранная deployment boundary.
 - **Deliverables:** pre-allocation limits; external browser supervisor/cancellation state model; реальная readiness health probe; configurable page readiness; browser redirect accounting; isolated real-Chromium smoke profile; документированный deny-by-default deployment.
@@ -176,7 +176,7 @@ Visual и editable modes полностью локальны и детермин
   - delayed Canvas/ECharts и browser GET redirect chain проходят bounded readiness/redirect tests;
   - отдельный Maven profile выполняет MHTML/PDF/PPTX через реальный Chromium и локальные fixtures без внешней сети.
 
-Смежный M0 scope также реализует [#2 — canonical `/MakeMHTML` + alias](https://github.com/denspbru/ocapp/issues/2), [#6 — IDN/terminal-dot canonicalization и private-address behavior](https://github.com/denspbru/ocapp/issues/6), [#7 — preserved protocol errors и browser GET status](https://github.com/denspbru/ocapp/issues/7). GitHub issues намеренно не закрываются этой рабочей веткой до parent review.
+Смежный M0 scope также реализует [#2 — canonical `/MakeMHTML` + alias](https://github.com/denspbru/ocapp/issues/2), [#6 — IDN/terminal-dot canonicalization и private-address behavior](https://github.com/denspbru/ocapp/issues/6), [#7 — preserved protocol errors и browser GET status](https://github.com/denspbru/ocapp/issues/7). Все перечисленные issues (#2-#10) закрыты.
 
 ### M1 — PageModel и DOM extraction
 
@@ -199,7 +199,7 @@ Visual и editable modes полностью локальны и детермин
 - **Target version:** `0.2.0`
 - **Issue:** [#12 — DOM-aware smart screenshot pagination](https://github.com/denspbru/ocapp/issues/12)
 - **Dependencies:** M1.
-- **Deliverables:** deterministic `PaginationPlan`; explicit/whitespace/block/fallback scoring; keep-together/orphan rules; oversized-block strategy; content-free warning codes; CSS-to-screenshot pixel mapping; configurable legacy fixed-slice fallback. Margins/footer/numbering remain future work.
+- **Deliverables:** deterministic `PaginationPlan`; explicit/whitespace/block/fallback scoring; keep-together/orphan rules; oversized-block strategy; content-free warning codes; CSS-to-screenshot pixel mapping; configurable legacy fixed-slice fallback. Margins/footer/numbering remain future work — issue #12 closed as partially completed; **не покрыто отдельным follow-up issue, требуется завести при необходимости**.
 - **Acceptance criteria:**
   - heading не остаётся внизу слайда без связанного content block;
   - table/image/chart не разрезается, если полностью помещается в content box;
