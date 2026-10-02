@@ -38,13 +38,13 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код после M0 hardening на дату этого документа. Будущие компоненты из последующих разделов ещё не являются текущим контрактом.
+Ниже описан код после M2 smart screenshot pagination. Компоненты M3+ из последующих разделов ещё не являются текущим контрактом.
 
 ### HTTP и orchestration
 
 - [`ConversionController.pptx(...)`](../src/main/java/com/nicodim/ocapp/api/ConversionController.java#L31-L32) обслуживает `POST /MakePPTX` и передаёт запрос общему conversion layer. Поля режима PPTX в request сейчас отсутствуют.
 - [`ConversionService.convert(...)`](../src/main/java/com/nicodim/ocapp/conversion/ConversionService.java) ограничивает concurrency, запускает preflight и render в executor, применяет общий operation timeout и формирует результат. Atomic ownership state исключает browser start после queued cancellation; running timeout вызывает `RenderContext.cancel()` и ждёт bounded cleanup.
-- [`PageRenderer.render(...)`](../src/main/java/com/nicodim/ocapp/conversion/PageRenderer.java) — текущая cancellation-aware граница browser/rendering adapter. Она принимает `URI`, `OutputFormat` и опциональный `RenderContext`, возвращает готовый `byte[]`; промежуточной модели страницы пока нет.
+- [`PageRenderer.render(...)`](../src/main/java/com/nicodim/ocapp/conversion/PageRenderer.java) — cancellation-aware граница browser/rendering adapter. Она принимает `URI`, `OutputFormat` и опциональный `RenderContext`, возвращает готовый `byte[]`; внутренние `PageModel` и `PaginationPlan` не раскрываются через HTTP API.
 
 ### Browser extraction и готовность страницы
 
@@ -55,11 +55,12 @@ Chromium остаётся источником истины для вычисл�
 
 ### Текущий PPTX renderer
 
-- [`ChromePageRenderer.capturePptx(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java#L138-L144) получает один full-page PNG через CDP.
-- [`ChromePageRenderer.createPresentation(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java#L146-L179) декодирует screenshot, вычисляет фиксированную высоту crop по aspect ratio слайда и помещает каждый crop как одно изображение на слайд Apache POI.
-- Текущий результат визуальный, но не редактируемый. Разрывы не учитывают DOM, заголовки, строки таблиц и целостность блоков. Локализованного fallback-а нет: screenshot покрывает весь слайд.
-- [`ConverterProperties.Pptx`](../src/main/java/com/nicodim/ocapp/config/ConverterProperties.java#L87-L94) задаёт только ширину, высоту и максимальное число слайдов.
-- [`ChromePageRenderer.validateArtifact(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java#L181-L194) для PPTX сейчас проверяет ZIP-сигнатуру, но не целостность OOXML, geometry, overflow и визуальные дефекты.
+- [`DomPageExtractor`](../src/main/java/com/nicodim/ocapp/pagemodel/DomPageExtractor.java) строит и валидирует bounded `PageModel`; [`SmartPaginationPlanner`](../src/main/java/com/nicodim/ocapp/pagination/SmartPaginationPlanner.java) выдаёт renderer-independent exact-coverage `PaginationPlan`.
+- Break priority: explicit slide hint, whitespace, block boundary, deterministic fallback. Planner защищает помещающиеся text/image/table/chart, `keepTogether`, transformed/overlapping blocks и heading с последующим content; oversized blocks получают стабильный warning.
+- [`ChromePageRenderer.capturePptx(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) получает один bounded full-page PNG через CDP, переводит CSS slices в screenshot pixels с exact coverage и помещает каждый full-width crop без distortion на отдельный 16:9 slide.
+- Smart pagination включена по умолчанию. Extraction/planner error может перейти в legacy fixed-height slicing; `PPTX_MAX_SLIDES_EXCEEDED` не fallback-ится и возникает до screenshot/POI.
+- Результат остаётся visual/image-only. Native/editable objects, localized fallback, margins/footer/numbering и public mode contract ещё не реализованы.
+- [`ChromePageRenderer.validateArtifact(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) для PPTX проверяет ZIP-сигнатуру; структурная/visual validation полного уровня относится к M8.
 
 ### Безопасность, ресурсы и тесты
 
@@ -179,7 +180,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M1 — PageModel и DOM extraction
 
-- **Status:** done in `openclaw/m1-pagemodel` (integration/release остаются отдельным parent action)
+- **Status:** released in `v0.2.0-alpha.1`
 - **Target version:** `0.2.0-alpha.1`
 - **Issue:** [#11 — PageModel and DOM block extraction](https://github.com/denspbru/ocapp/issues/11)
 - **Dependencies:** M0 issues [#3](https://github.com/denspbru/ocapp/issues/3), [#5](https://github.com/denspbru/ocapp/issues/5), [#8](https://github.com/denspbru/ocapp/issues/8), [#9](https://github.com/denspbru/ocapp/issues/9), [#10](https://github.com/denspbru/ocapp/issues/10).
@@ -194,11 +195,11 @@ Visual и editable modes полностью локальны и детермин
 
 ### M2 — smart screenshot pagination
 
-- **Status:** planned
+- **Status:** implemented; release integration/gates tracked separately
 - **Target version:** `0.2`
 - **Issue:** [#12 — DOM-aware smart screenshot pagination](https://github.com/denspbru/ocapp/issues/12)
 - **Dependencies:** M1.
-- **Deliverables:** deterministic `SlidePlan`; break candidate scoring; keep-together/orphan rules; margins/footer/numbering policy; oversized-block strategy; warning codes.
+- **Deliverables:** deterministic `PaginationPlan`; explicit/whitespace/block/fallback scoring; keep-together/orphan rules; oversized-block strategy; content-free warning codes; CSS-to-screenshot pixel mapping; configurable legacy fixed-slice fallback. Margins/footer/numbering remain future work.
 - **Acceptance criteria:**
   - heading не остаётся внизу слайда без связанного content block;
   - table/image/chart не разрезается, если полностью помещается в content box;

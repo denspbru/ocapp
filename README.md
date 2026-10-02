@@ -51,7 +51,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 # equivalent environment gate: OCAPP_E2E_FAIL_CLOSED=true
 ```
 
-Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, delayed Canvas marker, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction на локальном complex-layout fixture и cleanup временных профилей.
+Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, delayed Canvas marker, DOM-aware pagination трёхцветной tall-page fixture, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction на локальном complex-layout fixture и cleanup временных профилей.
 
 Строгие JaCoCo gates: instruction/line ≥90%, branch ≥70%, method/class =100%.
 
@@ -110,7 +110,10 @@ converter.security.allow-private-addresses=true
 | `converter.limits.max-capture-width` / `max-capture-height` | `10000` / `50000` | Pre-capture layout limits |
 | `converter.limits.max-capture-pixels` | `100000000` | Pre-allocation pixel limit |
 | `converter.limits.max-screenshot-bytes` | `52428800` | Base64 decoded screenshot limit |
-| `converter.pptx.max-slides` | `100` | POI slide/allocation bound |
+| `converter.pptx.max-slides` | `100` | Верхняя граница плана; превышение даёт `PPTX_MAX_SLIDES_EXCEEDED` до screenshot/POI |
+| `converter.pptx.smart-pagination-enabled` | `true` | DOM-aware screenshot pagination по PageModel |
+| `converter.pptx.legacy-fallback-enabled` | `true` | При ошибке extraction/planner использовать прежние fixed-height slices; max-slides не fallback-ится |
+| `converter.pptx.min-slice-height-pixels` | `120` | Минимальная CSS-высота эвристического/explicit slice |
 | `converter.page-model.max-blocks` / `max-depth` | `5000` / `64` | DOM model graph bounds до materialization |
 | `converter.page-model.max-text-length` / `max-table-cells` | `1000000` / `20000` | Общий text и table-cell budgets |
 | `converter.page-model.max-assets` / `max-asset-bytes` | `2000` / `52428800` | Asset references и оценка embedded bytes |
@@ -126,7 +129,15 @@ Readiness всегда включает `document.readyState`, fonts, images, no
 
 `PageModelDiagnostics.safeCanonicalJson(...)` — явный opt-in для deterministic tests/диагностики: он удаляет page text, link targets и URL path/query/fragment. Отдельный явно sensitive `canonicalJsonIncludingSensitiveContent(...)` предназначен только для контролируемых тестов. Обычные production logs не сериализуют модель и не содержат page text/query URL.
 
-В M1 `POST /MakePPTX` по-прежнему всегда создаёт прежние full-page screenshot slices. Extraction выполняется advisory и fail-open только в сторону legacy screenshot path: её ошибка не меняет результат conversion. DOM-aware pagination, native/editable objects, localized fallback, API `mode` и публичная выдача PageModel **не реализованы** и относятся к будущим milestones.
+## DOM-aware screenshot pagination (M2)
+
+`POST /MakePPTX` по умолчанию использует валидированный PageModel и deterministic `SmartPaginationPlanner`. Границы выбираются в порядке explicit `data-pptx-slide`, whitespace, block boundary и bounded fallback; planner не режет помещающиеся text/image/table/chart, `keepTogether`, transformed или overlapping blocks и защищает heading с последующим content. Oversized blocks делятся предсказуемо с content-free warning. План обязан давать положительные, непрерывные, монотонные slices без blank first/last slide.
+
+Chromium по-прежнему создаёт один full-page PNG в уже существующих width/height/pixel/byte limits. CSS-координаты плана переводятся в пиксели screenshot с единой rounding policy и exact coverage; каждый crop помещается full-width без изменения aspect ratio. Это bounded single-capture design, но bitmap целой страницы всё ещё декодируется в памяти.
+
+Если extraction или planner завершается ошибкой и `converter.pptx.legacy-fallback-enabled=true`, renderer использует прежнее fixed-height slicing. `PPTX_MAX_SLIDES_EXCEEDED` никогда не fallback-ится и возвращается до screenshot/POI. Smart pagination можно полностью отключить через `converter.pptx.smart-pagination-enabled=false`.
+
+M2 остаётся image-only: native/editable objects, локализованный fallback, margins/footer/numbering, API `mode` и публичная выдача PageModel **не реализованы** и относятся к следующим milestones.
 
 ## Lifecycle и health
 
@@ -147,7 +158,7 @@ Problem JSON содержит `status`, стабильный `code`, безоп�
 
 ## Известные ограничения
 
-- PPTX состоит из full-page raster slices и не содержит редактируемых DOM objects; M1 PageModel пока не управляет layout/output.
+- PPTX состоит из DOM-aware full-width raster slices и не содержит редактируемых DOM objects; при model/planner failure доступен legacy fixed-height fallback.
 - Asset references содержат metadata/URI и bounded estimate для embedded data URI; M1 не загружает и не декодирует assets и не экспортирует Canvas/SVG payload.
 - Application URL checks и DevTools interception — defense in depth, не network boundary.
 - Process-tree supervisor рассчитан на дочерние процессы того же OS user и требует разрешения среды на `ProcessHandle.destroy/destroyForcibly`; deployment-level PID/cgroup supervision остаётся дополнительным рубежом.

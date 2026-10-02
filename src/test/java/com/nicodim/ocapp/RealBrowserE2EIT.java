@@ -76,6 +76,7 @@ class RealBrowserE2EIT {
         fixture.createContext("/status/500", exchange -> targetStatus(exchange, 500));
         fixture.createContext("/late-status", this::lateStatus);
         fixture.createContext("/pagemodel", this::pageModelFixture);
+        fixture.createContext("/tall-pptx", this::tallPptxFixture);
         fixture.start();
         fixtureBase = "http://localhost:" + fixture.getAddress().getPort();
 
@@ -134,6 +135,25 @@ class RealBrowserE2EIT {
         assertThat(pptx.disposition()).contains(".pptx");
         assertThat(pptx.body()).startsWith((byte) 'P', (byte) 'K', (byte) 3, (byte) 4);
         assertThat(presentationContainsBlueCanvas(pptx.body())).isTrue();
+    }
+
+    @Test void paginatesTallPageIntoOrderedDomAwareScreenshotSlides() throws Exception {
+        Response response = post("/MakePPTX", fixtureBase + "/tall-pptx");
+        assertThat(response.status()).withFailMessage("PPTX response: %s", new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
+        assertThat(response.contentType()).startsWith("application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(response.body()))) {
+            assertThat(show.getSlides()).hasSize(3);
+            int[][] expected = {{220,40,40},{40,180,60},{40,80,220}};
+            for (int i = 0; i < expected.length; i++) {
+                var picture = (org.apache.poi.xslf.usermodel.XSLFPictureShape) show.getSlides().get(i).getShapes().getFirst();
+                BufferedImage image = ImageIO.read(new ByteArrayInputStream(picture.getPictureData().getData()));
+                int rgb = image.getRGB(image.getWidth()/2, image.getHeight()/2);
+                int[] actual = {(rgb>>>16)&255,(rgb>>>8)&255,rgb&255};
+                assertThat(actual).withFailMessage("slide %s center rgb", i).containsExactly(expected[i]);
+                assertThat(picture.getAnchor().getWidth()/picture.getAnchor().getHeight())
+                    .isCloseTo((double) image.getWidth()/image.getHeight(), org.assertj.core.data.Offset.offset(0.000_001));
+            }
+        }
     }
 
     @Test void enforcesBrowserGetRedirectLimitWhenHeadReturns200() throws Exception {
@@ -222,6 +242,19 @@ class RealBrowserE2EIT {
             <svg width='20' height='20'><rect width='20' height='20'/></svg><canvas width='20' height='20'></canvas>
             <div class='chart' data-pptx-chart><canvas width='20' height='20'></canvas></div><video width='20' height='20'></video>
             <p class='hidden'>hidden-secret</p><p data-pptx-ignore>ignored-secret</p><div id='render-ready'>ready</div>
+            </body></html>
+            """);
+    }
+
+    private void tallPptxFixture(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        sendHtml(exchange, """
+            <!doctype html><html><head><style>
+            html,body{margin:0;width:100%;}section{height:700px;width:100%;}
+            .red{background:rgb(220,40,40)}.green{background:rgb(40,180,60)}.blue{background:rgb(40,80,220)}
+            </style></head><body><section class='red'></section>
+            <section class='green' data-pptx-slide='new'></section>
+            <section class='blue' data-pptx-slide='new'><div id='render-ready'>ready</div></section>
             </body></html>
             """);
     }

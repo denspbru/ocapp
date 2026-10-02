@@ -5,6 +5,11 @@ import com.nicodim.ocapp.conversion.OutputFormat;
 import com.nicodim.ocapp.conversion.PageRenderer;
 import com.nicodim.ocapp.conversion.RenderContext;
 import com.nicodim.ocapp.pagemodel.DomPageExtractor;
+import com.nicodim.ocapp.pagemodel.PageModel;
+import com.nicodim.ocapp.pagination.PaginationOptions;
+import com.nicodim.ocapp.pagination.PaginationPlan;
+import com.nicodim.ocapp.pagination.SlideSlice;
+import com.nicodim.ocapp.pagination.SmartPaginationPlanner;
 import com.nicodim.ocapp.security.UrlSecurityPolicy;
 import com.nicodim.ocapp.support.ConversionException;
 import java.awt.Dimension;
@@ -89,10 +94,8 @@ public class ChromePageRenderer implements PageRenderer {
                 case MHTML -> captureMhtml(driver);
                 case PDF -> capturePdf(driver);
                 case PPTX -> {
-                    // M1 extraction is intentionally advisory until M2 consumes PageModel.
-                    // Legacy screenshot conversion must remain available on every extraction failure.
-                    tryExtractPageModel(driver);
-                    yield capturePptx(driver);
+                    PaginationPlan plan = preparePagination(driver);
+                    yield capturePptx(driver, plan);
                 }
             };
             throwBlocked(blockedRequest);
@@ -282,21 +285,40 @@ public class ChromePageRenderer implements PageRenderer {
         }
     }
 
-    private void tryExtractPageModel(ChromeDriver driver) {
-        try { new DomPageExtractor(properties.getPageModel()).extract(driver, URI.create(driver.getCurrentUrl())); }
-        catch (RuntimeException ignored) {
-            // No page URL, text, model fragment, or exception detail is logged. M2 will define
-            // how a validated model is consumed; M1 cannot alter the existing visual output.
+    PaginationPlan preparePagination(ChromeDriver driver) {
+        var ppt = properties.getPptx();
+        if (!ppt.isSmartPaginationEnabled()) return null;
+        try {
+            return planPageModel(extractPageModel(driver));
+        } catch (RuntimeException ex) {
+            if (ex instanceof ConversionException conversion
+                && "PPTX_MAX_SLIDES_EXCEEDED".equals(conversion.code())) throw conversion;
+            if (!ppt.isLegacyFallbackEnabled()) {
+                throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PAGINATION_FAILED",
+                    "Smart pagination failed", ex);
+            }
+            return null;
         }
     }
 
-    private byte[] capturePptx(ChromeDriver driver) {
+    PageModel extractPageModel(ChromeDriver driver) {
+        return new DomPageExtractor(properties.getPageModel()).extract(driver, URI.create(driver.getCurrentUrl()));
+    }
+
+    PaginationPlan planPageModel(PageModel model) {
+        var ppt = properties.getPptx();
+        return new SmartPaginationPlanner().plan(model, new PaginationOptions(
+            ppt.getSlideWidthInches() * 72, ppt.getSlideHeightInches() * 72,
+            ppt.getMinSliceHeightPixels(), ppt.getMaxSlides()));
+    }
+
+    private byte[] capturePptx(ChromeDriver driver, PaginationPlan plan) {
         Object data = driver.executeCdpCommand("Page.captureScreenshot", Map.of(
             "format", "png", "captureBeyondViewport", true, "fromSurface", true)).get("data");
         if (!(data instanceof String encoded)) throw new IllegalStateException("Chrome returned no screenshot data");
         byte[] screenshot = decodeBase64(encoded, properties.getLimits().getMaxScreenshotBytes());
         validatePngHeader(screenshot);
-        return createPresentation(screenshot);
+        return createPresentation(screenshot, plan);
     }
 
     static byte[] decodeBase64(String encoded, long maximum) {
@@ -329,8 +351,14 @@ public class ChromePageRenderer implements PageRenderer {
     }
 
     byte[] createPresentation(byte[] screenshot) {
+        return createPresentation(screenshot, null);
+    }
+
+    byte[] createPresentation(byte[] screenshot, PaginationPlan plan) {
         validatePngHeader(screenshot);
         try {
+            long imageWidth = unsignedInt(screenshot, 16), imageHeight = unsignedInt(screenshot, 20);
+            List<PixelSlice> pixelSlices = plan == null ? legacySlices(imageWidth, imageHeight) : plannedSlices(plan, imageWidth, imageHeight);
             BufferedImage source = ImageIO.read(new ByteArrayInputStream(screenshot));
             if (source == null) throw new IOException("Unsupported screenshot");
             var ppt = properties.getPptx();
@@ -338,20 +366,15 @@ public class ChromePageRenderer implements PageRenderer {
                 int slideWidth = (int) Math.round(ppt.getSlideWidthInches() * 72);
                 int slideHeight = (int) Math.round(ppt.getSlideHeightInches() * 72);
                 show.setPageSize(new Dimension(slideWidth, slideHeight));
-                double slideAspect = (double) slideWidth / slideHeight;
-                int cropHeight = Math.max(1, (int) Math.round(source.getWidth() / slideAspect));
-                int requiredSlides = (source.getHeight() + cropHeight - 1) / cropHeight;
-                if (requiredSlides > ppt.getMaxSlides()) throw tooLarge("Page requires more slides than configured");
-                for (int i = 0; i < requiredSlides; i++) {
-                    int y = i * cropHeight;
-                    int height = Math.min(cropHeight, source.getHeight() - y);
+                for (PixelSlice pixelSlice : pixelSlices) {
+                    int y = pixelSlice.y(), height = pixelSlice.height();
                     BufferedImage crop = source.getSubimage(0, y, source.getWidth(), height);
                     BoundedByteArrayOutputStream png = new BoundedByteArrayOutputStream(properties.getLimits().getMaxScreenshotBytes());
                     if (!ImageIO.write(crop, "png", png)) throw new IOException("PNG encoder is unavailable");
                     XSLFPictureData picture = show.addPicture(png.toByteArray(), PictureData.PictureType.PNG);
                     XSLFSlide slide = show.createSlide();
                     XSLFPictureShape shape = slide.createPicture(picture);
-                    double renderedHeight = (double) height / cropHeight * slideHeight;
+                    double renderedHeight = (double) height / source.getWidth() * slideWidth;
                     shape.setAnchor(new java.awt.geom.Rectangle2D.Double(0, 0, slideWidth, renderedHeight));
                 }
                 show.write(output);
@@ -362,6 +385,59 @@ public class ChromePageRenderer implements PageRenderer {
             throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PPTX_CREATION_FAILED", "Presentation could not be created", ex);
         }
     }
+
+    private List<PixelSlice> legacySlices(long imageWidth, long imageHeight) {
+        validateImageDimensions(imageWidth, imageHeight);
+        double aspect = properties.getPptx().getSlideWidthInches() / properties.getPptx().getSlideHeightInches();
+        long cropHeight = Math.max(1, Math.round(imageWidth / aspect));
+        long count = (imageHeight + cropHeight - 1) / cropHeight;
+        if (count > properties.getPptx().getMaxSlides()) throw maxSlides();
+        java.util.ArrayList<PixelSlice> result = new java.util.ArrayList<>((int) count);
+        for (long y = 0; y < imageHeight; y += cropHeight) result.add(new PixelSlice((int) y, (int) Math.min(cropHeight, imageHeight - y)));
+        return List.copyOf(result);
+    }
+
+    private List<PixelSlice> plannedSlices(PaginationPlan plan, long imageWidth, long imageHeight) {
+        validateImageDimensions(imageWidth, imageHeight);
+        double horizontalScale = imageWidth / plan.sourceWidth(), verticalScale = imageHeight / plan.sourceHeight();
+        double scaleTolerance = Math.max(horizontalScale, verticalScale) * 0.01
+            + 1.0 / Math.max(plan.sourceWidth(), plan.sourceHeight());
+        if (plan.slices().size() > properties.getPptx().getMaxSlides()) throw maxSlides();
+        if (plan.slices().isEmpty()
+            || !Double.isFinite(plan.sourceWidth()) || !Double.isFinite(plan.sourceHeight())
+            || plan.sourceWidth() <= 0 || plan.sourceHeight() <= 0
+            || !Double.isFinite(horizontalScale) || !Double.isFinite(verticalScale)
+            || Math.abs(horizontalScale - verticalScale) > scaleTolerance) {
+            throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PAGINATION_INVALID", "Pagination plan is invalid");
+        }
+        java.util.ArrayList<PixelSlice> result = new java.util.ArrayList<>(plan.slices().size());
+        int cursor = 0;
+        for (int i = 0; i < plan.slices().size(); i++) {
+            SlideSlice slice = plan.slices().get(i);
+            int end = i == plan.slices().size() - 1 ? (int) imageHeight
+                : (int) Math.round(slice.source().bottom() / plan.sourceHeight() * imageHeight);
+            if (slice.index() != i || Math.abs(slice.source().y() - (i == 0 ? 0 : plan.slices().get(i - 1).source().bottom())) > 0.000_001
+                || slice.source().height() <= 0 || end <= cursor || end > imageHeight) {
+                throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PAGINATION_INVALID", "Pagination plan cannot be mapped to screenshot pixels");
+            }
+            result.add(new PixelSlice(cursor, end - cursor)); cursor = end;
+        }
+        if (cursor != imageHeight) {
+            throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PAGINATION_INVALID", "Pagination screenshot coverage is incomplete");
+        }
+        return List.copyOf(result);
+    }
+
+    private static void validateImageDimensions(long imageWidth, long imageHeight) {
+        if (imageWidth < 1 || imageHeight < 1 || imageWidth > Integer.MAX_VALUE || imageHeight > Integer.MAX_VALUE)
+            throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PAGINATION_INVALID", "Screenshot dimensions cannot be mapped safely");
+    }
+
+    private static ConversionException maxSlides() {
+        return new ConversionException(HttpStatus.PAYLOAD_TOO_LARGE, "PPTX_MAX_SLIDES_EXCEEDED", "Page requires more slides than configured");
+    }
+
+    private record PixelSlice(int y, int height) { }
 
     static void validateArtifact(byte[] bytes, OutputFormat format) {
         if (bytes == null || bytes.length == 0) throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "CONVERSION_FAILED", "Browser produced an empty document");

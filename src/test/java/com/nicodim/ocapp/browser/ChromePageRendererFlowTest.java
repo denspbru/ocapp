@@ -7,6 +7,8 @@ import static org.mockito.Mockito.*;
 import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.conversion.OutputFormat;
 import com.nicodim.ocapp.conversion.RenderContext;
+import com.nicodim.ocapp.pagemodel.PageModel;
+import com.nicodim.ocapp.pagination.PaginationPlan;
 import com.nicodim.ocapp.security.UrlSecurityPolicy;
 import com.nicodim.ocapp.support.ConversionException;
 import java.awt.image.BufferedImage;
@@ -19,6 +21,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -163,6 +167,48 @@ class ChromePageRendererFlowTest {
         verify(driver).quit();
     }
 
+    @Test void preparePaginationHonorsSwitchFallbackAndStableErrors() {
+        ControlledRenderer controlled = new ControlledRenderer(factory, properties, policy, navigationTrace);
+        properties.getPptx().setSmartPaginationEnabled(false);
+        assertThat(controlled.preparePagination(driver)).isNull();
+        assertThat(controlled.extractions).isZero();
+
+        properties.getPptx().setSmartPaginationEnabled(true);
+        assertThat(controlled.preparePagination(driver)).isNotNull();
+        controlled.failure = new IllegalStateException("page-private-value");
+        assertThat(controlled.preparePagination(driver)).isNull();
+        assertThat(controlled.extractions).isEqualTo(2);
+
+        properties.getPptx().setLegacyFallbackEnabled(false);
+        assertCode(() -> controlled.preparePagination(driver), "PAGINATION_FAILED");
+        controlled.failure = new ConversionException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+            "PAGEMODEL_INVALID", "private model detail");
+        assertCode(() -> controlled.preparePagination(driver), "PAGINATION_FAILED");
+
+        controlled.failure = new ConversionException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE,
+            "PPTX_MAX_SLIDES_EXCEEDED", "too many");
+        assertCode(() -> controlled.preparePagination(driver), "PPTX_MAX_SLIDES_EXCEEDED");
+    }
+
+    @Test void extractsAndPlansValidatedPageModelThroughProductionHelpers() {
+        when(driver.executeScript(anyString(), any(Object[].class))).thenReturn(rawPageModel());
+        PageModel model = renderer.extractPageModel(driver);
+        assertThat(model.blocks()).hasSize(1);
+        properties.getPptx().setMinSliceHeightPixels(20);
+        PaginationPlan plan = renderer.planPageModel(model);
+        assertThat(plan.slices()).isNotEmpty();
+        assertThat(plan.sourceWidth()).isEqualTo(100);
+        assertThat(plan.sourceHeight()).isEqualTo(200);
+    }
+
+    @Test void maxSlideFailureOccursBeforeScreenshotCaptureOrPoiCreation() {
+        ChromePageRenderer rejecting = spy(renderer);
+        doThrow(new ConversionException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE,
+            "PPTX_MAX_SLIDES_EXCEEDED", "too many")).when(rejecting).preparePagination(driver);
+        assertCode(() -> rejecting.render(URI.create("https://example.org/"), OutputFormat.PPTX), "PPTX_MAX_SLIDES_EXCEEDED");
+        verify(driver, never()).executeCdpCommand(eq("Page.captureScreenshot"), anyMap());
+    }
+
     @Test void mapsSeleniumTimeoutAndOtherFailuresToStableErrors() {
         doThrow(new org.openqa.selenium.TimeoutException("slow")).when(driver).get(anyString());
         assertCode(() -> renderer.render(URI.create("https://example.org/"), OutputFormat.MHTML), "CONVERSION_TIMEOUT");
@@ -170,6 +216,46 @@ class ChromePageRendererFlowTest {
         when(driver.getDevTools()).thenReturn(devTools);
         doThrow(new org.openqa.selenium.WebDriverException("blocked")).when(driver).get(anyString());
         assertCode(() -> renderer.render(URI.create("https://example.org/"), OutputFormat.MHTML), "PAGE_RENDER_FAILED");
+    }
+
+    private static final class ControlledRenderer extends ChromePageRenderer {
+        private RuntimeException failure;
+        private int extractions;
+        ControlledRenderer(BrowserFactory factory, ConverterProperties properties, UrlSecurityPolicy policy,
+                           NavigationTrace navigationTrace) {
+            super(factory, properties, policy, navigationTrace);
+        }
+        @Override PageModel extractPageModel(ChromeDriver driver) {
+            extractions++;
+            if (failure != null) throw failure;
+            return mock(PageModel.class);
+        }
+        @Override PaginationPlan planPageModel(PageModel model) {
+            if (failure != null) throw failure;
+            return mock(PaginationPlan.class);
+        }
+    }
+
+    private static Map<String, Object> rawPageModel() {
+        Map<String,Object> block = new LinkedHashMap<>();
+        block.put("id","body"); block.put("type","TEXT"); block.put("parentId",""); block.put("children",List.of());
+        block.put("depth",0); block.put("domOrder",0); block.put("visualOrder",0);
+        block.put("bounds",Map.of("x",0d,"y",0d,"width",100d,"height",200d)); block.put("clip",null);
+        block.put("transform",Map.of("transformed",false,"matrix","none","rotation",0d,"scaleX",1d,"scaleY",1d));
+        block.put("overlaps",List.of());
+        block.put("style",Map.ofEntries(Map.entry("display","block"),Map.entry("position","static"),
+            Map.entry("overflowX","visible"),Map.entry("overflowY","visible"),Map.entry("color","black"),
+            Map.entry("backgroundColor","transparent"),Map.entry("fontFamily","sans"),Map.entry("fontSize",16d),
+            Map.entry("fontWeight",400),Map.entry("fontStyle","normal"),Map.entry("textAlign","start"),
+            Map.entry("lineHeight",19.2d),Map.entry("opacity",1d),Map.entry("zIndex",0),
+            Map.entry("flex",false),Map.entry("grid",false)));
+        block.put("textRuns",List.of()); block.put("links",List.of()); block.put("list",null); block.put("table",null);
+        block.put("assets",List.of()); block.put("hints",Map.of("keepTogether",false,"slide","","title","","notes","","layout","","render","AUTO"));
+        block.put("warnings",List.of());
+        return Map.of("document",Map.of("title","","language",""),
+            "capture",Map.of("userAgent","Chrome","locale","en","timezone","UTC","dpr",1d,"readiness","complete","observations",List.of()),
+            "geometry",Map.of("width",100d,"height",200d,"viewport",Map.of("x",0d,"y",0d,"width",100d,"height",100d),"scrollX",0d,"scrollY",0d),
+            "blocks",List.of(block),"roots",List.of("body"),"assets",List.of(),"warnings",List.of());
     }
 
     @SuppressWarnings("unchecked")

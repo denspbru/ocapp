@@ -146,8 +146,14 @@ public class ConverterProperties {
         @DecimalMin("1.0") private double slideWidthInches = 13.333;
         @DecimalMin("1.0") private double slideHeightInches = 7.5;
         @Min(1) @Max(500) private int maxSlides = 100;
+        private boolean smartPaginationEnabled = true;
+        private boolean legacyFallbackEnabled = true;
+        @DecimalMin("1.0") private double minSliceHeightPixels = 120;
         public double getSlideWidthInches() { return slideWidthInches; } public void setSlideWidthInches(double v) { slideWidthInches = v; }
         public double getSlideHeightInches() { return slideHeightInches; } public void setSlideHeightInches(double v) { slideHeightInches = v; }
         public int getMaxSlides() { return maxSlides; } public void setMaxSlides(int v) { maxSlides = v; }
+        public boolean isSmartPaginationEnabled() { return smartPaginationEnabled; } public void setSmartPaginationEnabled(boolean v) { smartPaginationEnabled = v; }
+        public boolean isLegacyFallbackEnabled() { return legacyFallbackEnabled; } public void setLegacyFallbackEnabled(boolean v) { legacyFallbackEnabled = v; }
+        public double getMinSliceHeightPixels() { return minSliceHeightPixels; } public void setMinSliceHeightPixels(double v) { minSliceHeightPixels = v; }
     }
 }
