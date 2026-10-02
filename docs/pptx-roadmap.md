@@ -180,8 +180,8 @@ Visual и editable modes полностью локальны и детермин
 
 ### M1 — PageModel и DOM extraction
 
-- **Status:** released in `v0.2.0-alpha.1`
-- **Target version:** `0.2.0-alpha.1`
+- **Status:** released in `v0.2.0`
+- **Target version:** `0.2.0`
 - **Issue:** [#11 — PageModel and DOM block extraction](https://github.com/denspbru/ocapp/issues/11)
 - **Dependencies:** M0 issues [#3](https://github.com/denspbru/ocapp/issues/3), [#5](https://github.com/denspbru/ocapp/issues/5), [#8](https://github.com/denspbru/ocapp/issues/8), [#9](https://github.com/denspbru/ocapp/issues/9), [#10](https://github.com/denspbru/ocapp/issues/10).
 - **Deliverables:** immutable model and validators; browser extraction script/adapter; supported style subset; asset/hint references; safe diagnostic serialization; fixture corpus for extraction. Реализованный M1 contract внутренний: PageModel не выдаётся через HTTP, не участвует в pagination/render layout, а advisory extraction failure не отключает legacy screenshot PPTX.
@@ -195,8 +195,8 @@ Visual и editable modes полностью локальны и детермин
 
 ### M2 — smart screenshot pagination
 
-- **Status:** implemented; release integration/gates tracked separately
-- **Target version:** `0.2`
+- **Status:** released in `v0.2.0`
+- **Target version:** `0.2.0`
 - **Issue:** [#12 — DOM-aware smart screenshot pagination](https://github.com/denspbru/ocapp/issues/12)
 - **Dependencies:** M1.
 - **Deliverables:** deterministic `PaginationPlan`; explicit/whitespace/block/fallback scoring; keep-together/orphan rules; oversized-block strategy; content-free warning codes; CSS-to-screenshot pixel mapping; configurable legacy fixed-slice fallback. Margins/footer/numbering remain future work.
