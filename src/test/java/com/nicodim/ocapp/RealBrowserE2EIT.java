@@ -8,6 +8,7 @@ import com.nicodim.ocapp.browser.BrowserSession;
 import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.pagemodel.BlockType;
 import com.nicodim.ocapp.pagemodel.DomPageExtractor;
+import com.nicodim.ocapp.pagemodel.PageBlock;
 import com.nicodim.ocapp.pagemodel.PageModel;
 import com.nicodim.ocapp.pagemodel.PageModelDiagnostics;
 import com.sun.net.httpserver.HttpExchange;
@@ -29,11 +30,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFPictureShape;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -77,6 +87,7 @@ class RealBrowserE2EIT {
         fixture.createContext("/late-status", this::lateStatus);
         fixture.createContext("/pagemodel", this::pageModelFixture);
         fixture.createContext("/tall-pptx", this::tallPptxFixture);
+        fixture.createContext("/m3-mixed", this::m3MixedFixture);
         fixture.start();
         fixtureBase = "http://localhost:" + fixture.getAddress().getPort();
 
@@ -159,6 +170,58 @@ class RealBrowserE2EIT {
         }
     }
 
+    @Test void rendersMixedM3DeckThroughConfiguredLibreOffice() throws Exception {
+        String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
+        assumeTrue(!executable.isBlank(), "External-office smoke is opt-in; set -Docapp.e2e.libreoffice=/path/to/soffice");
+        Path soffice = Path.of(executable).toAbsolutePath().normalize();
+        assertThat(soffice).isExecutable();
+        String artifactSetting = configured("ocapp.e2e.artifactsDir", "OCAPP_E2E_ARTIFACTS_DIR");
+        boolean retainArtifacts = !artifactSetting.isBlank();
+        Path work = retainArtifacts ? Path.of(artifactSetting).toAbsolutePath().normalize() : Files.createTempDirectory("ocapp-office-e2e-");
+        Files.createDirectories(work);
+        Path officeProfile = work.resolve("libreoffice-profile");
+        Path deck = work.resolve("m3-mixed.pptx"), pdf = work.resolve("m3-mixed.pdf");
+        Path rendered = work.resolve("m3-mixed-page-1.png"), log = work.resolve("libreoffice.log");
+        try {
+            Response response = post("/MakePPTX", fixtureBase + "/m3-mixed");
+            assertThat(response.status()).withFailMessage("PPTX response: %s", new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
+            Files.write(deck, response.body());
+            PictureAnchors anchors = pictureAnchors(response.body());
+            assertThat(anchors.nativeImage().getCenterX()).isLessThan(anchors.fallback().getCenterX());
+            assertThat(anchors.nativeImage().intersects(anchors.fallback())).isFalse();
+
+            Process process = new ProcessBuilder(soffice.toString(), "--headless", "--nologo", "--nodefault", "--nolockcheck",
+                "--norestore", "-env:UserInstallation=" + officeProfile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
+                "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            boolean completed = process.waitFor(45, TimeUnit.SECONDS);
+            if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
+            assertThat(completed).withFailMessage("LibreOffice conversion timed out; log=%s", log).isTrue();
+            assertThat(process.exitValue()).withFailMessage("LibreOffice exit; log=%s%n%s", log, Files.readString(log)).isZero();
+            assertThat(pdf).isRegularFile();
+            assertThat(Files.size(pdf)).isBetween(1L, 50L * 1024 * 1024);
+
+            try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+                assertThat(document.getNumberOfPages()).isEqualTo(1);
+                String text = new PDFTextStripper().getText(document), compactText = text.replaceAll("\\s+", "");
+                for (String marker : List.of("EditableM3heading", "Paragraph", "editablespan", "M3link"))
+                    assertThat(occurrences(compactText, marker)).withFailMessage("PDF text: %s", text).isEqualTo(1);
+                assertThat(document.getPage(0).getAnnotations()).filteredOn(PDAnnotationLink.class::isInstance)
+                    .map(PDAnnotationLink.class::cast).anySatisfy(link -> {
+                        assertThat(link.getAction()).isInstanceOf(PDActionURI.class);
+                        assertThat(((PDActionURI) link.getAction()).getURI()).isEqualTo("https://example.org/m3");
+                    });
+                BufferedImage image = new PDFRenderer(document).renderImageWithDPI(0, 144);
+                assertThat(image.getWidth()).isBetween(1000, 4000); assertThat(image.getHeight()).isBetween(500, 3000);
+                assertRenderedColor(image, anchors.nativeImage(), 960, 540, color -> color.getRed() > 150 && color.getBlue() > 120 && color.getGreen() < 100, "native magenta image");
+                assertRenderedColor(image, anchors.fallback(), 960, 540, color -> color.getBlue() > 140 && color.getBlue() > color.getRed() + 50, "localized blue canvas fallback");
+                assertThat(ImageIO.write(image, "png", rendered.toFile())).isTrue();
+            }
+        } finally {
+            deleteTree(officeProfile);
+            if (!retainArtifacts) deleteTree(work);
+        }
+    }
+
     @Test void enforcesBrowserGetRedirectLimitWhenHeadReturns200() throws Exception {
         Response response = post("/MakeMHTML", fixtureBase + "/redirect/0");
         assertThat(response.status()).withFailMessage("Redirect response: %s", new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(422);
@@ -198,6 +261,9 @@ class RealBrowserE2EIT {
             assertThat(first.blocks()).allMatch(b -> b.domOrder() >= 0 && b.visualOrder() >= 0);
             assertThat(first.blocks()).anyMatch(b -> b.textRuns().stream().anyMatch(r -> r.text().contains("direct body text")));
             assertThat(first.blocks()).anyMatch(b -> b.textRuns().stream().anyMatch(r -> r.text().contains("explicitly visible")));
+            Map<String,PageBlock> byId = first.blocks().stream().collect(Collectors.toMap(PageBlock::id, b -> b));
+            assertThat(first.blocks()).allSatisfy(block -> assertThat(block.overlapIds())
+                .noneMatch(other -> ancestor(block.id(), byId.get(other), byId) || ancestor(other, block, byId)));
             assertThat(first.blocks()).filteredOn(b -> b.table()!=null).singleElement().satisfies(b ->
                 assertThat(b.table().cells()).anyMatch(c -> c.row()==1 && c.column()==1));
         }
@@ -262,6 +328,26 @@ class RealBrowserE2EIT {
             """);
     }
 
+    private void m3MixedFixture(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        sendHtml(exchange, """
+            <!doctype html><html><head><style>
+            html,body{margin:0;width:100%;height:760px;background:rgb(255,255,255);font-family:Arial,sans-serif}
+            h1{position:absolute;left:60px;top:45px;margin:0;font-size:42px;color:rgb(20,60,110)}
+            p{position:absolute;left:60px;top:125px;margin:0;font-size:24px;line-height:32px;color:rgb(25,25,25)}
+            span{position:absolute;left:220px;top:125px;font-size:24px;line-height:32px;font-weight:700;color:rgb(120,30,100)}
+            a{position:absolute;left:420px;top:125px;font-size:24px;line-height:32px}
+            img{position:absolute;left:60px;top:220px;width:160px;height:80px}
+            canvas{position:absolute;left:620px;top:120px;width:260px;height:140px}
+            </style></head><body><h1 id='render-ready'>Editable M3 heading</h1>
+            <p>Paragraph</p><span>editable span</span><a href='https://example.org/m3'>M3 link</a>
+            <img alt='native magenta' src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAFElEQVR4nGO8o7GFAQaY4CwGBgYAKbYBvGsL5CEAAAAASUVORK5CYII='>
+            <canvas id='fallback' width='260' height='140'></canvas><script>
+            const c=document.querySelector('#fallback'),x=c.getContext('2d');x.fillStyle='rgb(35,90,210)';x.fillRect(0,0,c.width,c.height);
+            x.fillStyle='rgb(250,210,30)';x.fillRect(20,20,40,40);</script></body></html>
+            """);
+    }
+
     private void blocked(HttpExchange exchange) throws IOException {
         if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
         sendHtml(exchange, "<!doctype html><html><body><div id='render-ready'>ready</div><img src='http://169.254.169.254/latest/meta-data/'></body></html>");
@@ -295,6 +381,63 @@ class RealBrowserE2EIT {
         exchange.getResponseBody().write(body);
         exchange.close();
     }
+
+    private static boolean ancestor(String expected, PageBlock child, Map<String,PageBlock> byId) {
+        for (int depth = 0; child != null && !child.parentId().isEmpty() && depth <= byId.size(); depth++) {
+            if (expected.equals(child.parentId())) return true;
+            child = byId.get(child.parentId());
+        }
+        return false;
+    }
+
+    private static String configured(String property, String environment) {
+        String value = System.getProperty(property, "").trim();
+        return value.isEmpty() ? System.getenv().getOrDefault(environment, "").trim() : value;
+    }
+
+    private static PictureAnchors pictureAnchors(byte[] bytes) throws IOException {
+        java.awt.geom.Rectangle2D nativeImage = null, fallback = null;
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
+            assertThat(show.getSlides()).hasSize(1);
+            for (var shape : show.getSlides().getFirst().getShapes()) {
+                if (!(shape instanceof XSLFPictureShape picture)) continue;
+                BufferedImage image = ImageIO.read(new ByteArrayInputStream(picture.getPictureData().getData()));
+                java.awt.Color center = new java.awt.Color(image.getRGB(image.getWidth() / 2, image.getHeight() / 2));
+                if (center.getRed() > 150 && center.getBlue() > 120 && center.getGreen() < 100) nativeImage = picture.getAnchor();
+                if (center.getBlue() > 140 && center.getBlue() > center.getRed() + 50) fallback = picture.getAnchor();
+            }
+        }
+        assertThat(nativeImage).as("native image anchor").isNotNull();
+        assertThat(fallback).as("fallback anchor").isNotNull();
+        return new PictureAnchors(nativeImage, fallback);
+    }
+
+    private static void assertRenderedColor(BufferedImage image, java.awt.geom.Rectangle2D anchor, double slideWidth,
+                                            double slideHeight, java.util.function.Predicate<java.awt.Color> expected,
+                                            String description) {
+        int centerX = (int) Math.round(anchor.getCenterX() / slideWidth * image.getWidth());
+        int centerY = (int) Math.round(anchor.getCenterY() / slideHeight * image.getHeight());
+        boolean found = false;
+        for (int y = Math.max(0, centerY - 4); y <= Math.min(image.getHeight() - 1, centerY + 4) && !found; y++)
+            for (int x = Math.max(0, centerX - 4); x <= Math.min(image.getWidth() - 1, centerX + 4); x++)
+                if (expected.test(new java.awt.Color(image.getRGB(x, y)))) { found = true; break; }
+        assertThat(found).as(description + " near rendered anchor center").isTrue();
+    }
+
+    private static int occurrences(String text, String marker) {
+        int count = 0, index = 0;
+        while ((index = text.indexOf(marker, index)) >= 0) { count++; index += marker.length(); }
+        return count;
+    }
+
+    private static void deleteTree(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) return;
+        try (var paths = Files.walk(root)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+        }
+    }
+
+    private record PictureAnchors(java.awt.geom.Rectangle2D nativeImage, java.awt.geom.Rectangle2D fallback) { }
 
     private static java.awt.Color slideCenterColor(XMLSlideShow show, int index) throws IOException {
         double x = show.getPageSize().getWidth() / 2d, y = show.getPageSize().getHeight() / 2d;

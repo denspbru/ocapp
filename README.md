@@ -56,6 +56,16 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 
 Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, delayed Canvas marker, DOM-aware pagination трёхцветной tall-page fixture, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction на локальном complex-layout fixture и cleanup временных профилей.
 
+Опциональный external-office gate использует явно заданный локальный LibreOffice, отдельный bounded profile и timeout; platform path не зашит в build. Он генерирует mixed M3 deck реальным Chromium pipeline, экспортирует его Impress в PDF, рендерит PDF через PDFBox и проверяет один slide/page, отсутствие потери/дублирования marker text, clickable URI, native image и localized Canvas fallback в ожидаемых anchors:
+
+```bash
+mvn -Preal-browser -Docapp.e2e.failClosed=true \
+  -Docapp.e2e.libreoffice=/Applications/LibreOffice.app/Contents/MacOS/soffice \
+  -Docapp.e2e.artifactsDir=/tmp/ocapp-office-evidence verify
+```
+
+Вместо system properties доступны `OCAPP_E2E_LIBREOFFICE` и `OCAPP_E2E_ARTIFACTS_DIR`. Без LibreOffice property external-office test явно skipped; при заданном executable conversion failure/timeout является test failure.
+
 Строгие JaCoCo gates: instruction/line ≥90%, branch ≥70%, method/class =100%.
 
 ## Безопасный запуск

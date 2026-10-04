@@ -119,7 +119,7 @@ public final class HybridPptxRenderer {
         box.setAnchor(mapper.map(text.bounds()));
         box.setLeftInset(0); box.setRightInset(0); box.setTopInset(0); box.setBottomInset(0);
         box.setVerticalAlignment(VerticalAlignment.TOP);
-        box.setWordWrap(true);
+        box.setWordWrap(text.bounds().height() > text.lineHeightPixels() * 1.4);
         Color background = CssColors.parse(text.backgroundColorCss());
         if (background != null && background.getAlpha() > 0) box.setFillColor(new Color(background.getRed(), background.getGreen(), background.getBlue()));
         box.clearText();

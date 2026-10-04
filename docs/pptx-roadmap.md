@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код активной M3 editable text/images реализации на feature branch. Компоненты M4+ из последующих разделов ещё не являются текущим контрактом.
+Ниже описан код завершённой M3 editable text/images реализации на feature branch. Компоненты M4+ из последующих разделов ещё не являются текущим контрактом.
 
 ### HTTP и orchestration
 
@@ -60,14 +60,14 @@ Chromium остаётся источником истины для вычисл�
 - [`ChromePageRenderer.capturePptx(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) получает один bounded full-page PNG через CDP. При `editable-enabled=true` validated PageModel и PaginationPlan передаются deterministic M3 planner/POI renderer-у; при `false` сохраняются M2 full-width visual slices.
 - M3 создаёт native XSLF text boxes (runs, font/style/color, alignment, line spacing, safe hyperlinks), native embedded raster pictures с aspect-preserving fit и простые background shapes. LIST/TABLE, SVG/Canvas/chart, transforms, clipping, overlap groups, unsupported styles/assets и split native candidates получают localized screenshot crops без двойной отрисовки.
 - Smart pagination включена по умолчанию. Extraction/planner error может перейти в legacy fixed-height slicing; `PPTX_MAX_SLIDES_EXCEEDED` не fallback-ится и возникает до screenshot/POI. Margins/footer/numbering и public mode contract ещё не реализованы.
-- [`ChromePageRenderer.validateArtifact(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) для PPTX проверяет ZIP-сигнатуру; структурная/visual validation полного уровня относится к M8.
+- [`ChromePageRenderer.validateArtifact(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) для PPTX проверяет ZIP-сигнатуру. M3 mixed fixture дополнительно проходит opt-in LibreOffice/PDFBox external-office regression; полная fixture matrix, thresholds и baseline governance остаются M8.
 
 ### Безопасность, ресурсы и тесты
 
 - [`UrlSecurityPolicy.validate(...)`](../src/main/java/com/nicodim/ocapp/security/UrlSecurityPolicy.java#L27-L51) ограничивает URL, host и resolved addresses; [`SecureRedirectResolver.resolve(...)`](../src/main/java/com/nicodim/ocapp/security/SecureRedirectResolver.java#L31-L54) выполняет HEAD preflight с ограничением redirect-ов.
 - [`BrowserSession`](../src/main/java/com/nicodim/ocapp/browser/BrowserSession.java) линеаризует startup/cancel, bounded выполняет quit/service stop, затем graceful/forced termination same-user process tree и profile cleanup; `RenderContext` регистрирует forced-close hook.
 - Layout/pixel/base64/PNG IHDR/output/slide limits применяются до соответствующих дорогих application allocations; PDF читается bounded CDP stream. MHTML CDP всё ещё возвращает готовый `String`, что документировано как ограничение.
-- Unit tests проверяют image pagination, limits, races и Selenium flow; Failsafe [`RealBrowserE2EIT`](../src/test/java/com/nicodim/ocapp/RealBrowserE2EIT.java) запускает local-only Chromium MHTML/PDF/PPTX, доказывает delayed marker/canvas в artifacts, browser redirects, real/late GET errors и blocked subresource.
+- Unit tests проверяют image pagination, limits, races и Selenium flow; Failsafe [`RealBrowserE2EIT`](../src/test/java/com/nicodim/ocapp/RealBrowserE2EIT.java) запускает local-only Chromium MHTML/PDF/PPTX, доказывает delayed marker/canvas в artifacts, browser redirects, real/late GET errors и blocked subresource. При явно заданном LibreOffice тот же bounded test генерирует M3 mixed deck, конвертирует его изолированным headless Impress в PDF, рендерит PDFBox и проверяет page count, unique text, URI annotation, native-image и localized-fallback pixels.
 
 ## 3. Целевая архитектура
 
@@ -210,7 +210,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M3 — редактируемые text и images
 
-- **Status:** in progress on feature branch; implementation and automated structural/mixed-browser checks complete, office-rendered visual regression remains unproven
+- **Status:** done on feature branch; unreleased — structural, real-browser mixed and LibreOffice-rendered regression checks passed
 - **Target version:** `0.3`
 - **Issue:** [#13 — editable text and images](https://github.com/denspbru/ocapp/issues/13)
 - **Dependencies:** M1, M2.
@@ -448,6 +448,7 @@ Native objects не обязательны. Этот mode должен оста�
 | 2026-09-30 | Ввести PageModel как boundary | Browser extraction, analysis/pagination и POI rendering должны развиваться и тестироваться независимо | PageModel не зависит от Selenium/CDP DTO и Apache POI |
 | 2026-09-30 | Разрешать AI только как optional explicit opt-in | Конвертация должна работать локально, предсказуемо и без скрытой передачи данных | Visual/editable modes не используют AI; summary имеет deterministic baseline |
 | 2026-10-04 | Включить M3 hybrid renderer по умолчанию с operator compatibility switch | Issue #13 должен работать через существующий `/MakePPTX`, но M2 visual output нужен для rollback/compatibility | `converter.pptx.editable-enabled=false` возвращает DOM-aware full-width screenshot path; extraction/planner failure сохраняет legacy fixed slicing |
+| 2026-10-04 | Считать M3 acceptance доказанным после внешнего LibreOffice render | POI structure и browser-side crops недостаточны для проверки реального office layout | Opt-in bounded gate проверяет Impress PDF page, unique text, hyperlink annotation и representative native/fallback pixels; M8 остаётся полной cross-fixture baseline системой |
 
 ## 12. Open questions
 

@@ -52,12 +52,14 @@ class HybridPptxRendererTest {
             List.of(), List.of(), List.of(image), false, List.of());
         PageBlock table = block("table", BlockType.TABLE, "", List.of(), new Bounds(10, 28, 30, 15),
             List.of(), List.of(), List.of(), false, List.of());
+        PageBlock multiline = block("multiline", BlockType.TEXT, "", List.of(), new Bounds(82, 0, 18, 50),
+            List.of(new TextRun("line one\nline two", style())), List.of(), List.of(), false, List.of());
         ComputedStyle backgroundStyle = new ComputedStyle("block", "static", "visible", "visible", "black",
             "rgb(240, 240, 240)", "Arial", 16, 400, "normal", "left", 19.2, 1, 0, false, false);
         PageBlock background = new PageBlock("background", BlockType.CONTAINER, "", List.of(), 0, 0, 0,
             new Bounds(0, 0, 100, 50), null, TransformSummary.none(), List.of(), backgroundStyle,
             List.of(), List.of(), null, null, List.of(), AuthoringHints.none(), List.of());
-        var model = model(List.of(background, text, picture, table));
+        var model = model(List.of(background, text, picture, table, multiline));
         PaginationPlan plan = new PaginationPlan(100, 50, List.of(slice()), List.of());
         BufferedImage screenshot = new BufferedImage(200, 100, BufferedImage.TYPE_INT_RGB);
         var graphics = screenshot.createGraphics(); graphics.setColor(Color.CYAN); graphics.fillRect(0, 0, 200, 100); graphics.dispose();
@@ -65,7 +67,7 @@ class HybridPptxRendererTest {
         byte[] pptx = new HybridPptxRenderer(properties).render(screenshot, model, plan);
         try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(pptx))) {
             assertThat(show.getSlides()).hasSize(1);
-            assertThat(show.getSlides().getFirst().getShapes()).hasSize(4);
+            assertThat(show.getSlides().getFirst().getShapes()).hasSize(5);
             XSLFTextShape textShape = show.getSlides().getFirst().getShapes().stream()
                 .filter(XSLFTextBox.class::isInstance).map(XSLFTextShape.class::cast).findFirst().orElseThrow();
             var run = textShape.getTextParagraphs().getFirst().getTextRuns().getFirst();
@@ -75,6 +77,10 @@ class HybridPptxRendererTest {
             assertThat(run.getXmlObject().toString()).containsIgnoringCase("0A141E");
             assertThat(run.getHyperlink()).isNotNull();
             assertThat(run.getHyperlink().getAddress()).isEqualTo("https://example.org/path?q=1");
+            assertThat(textShape.getWordWrap()).isFalse();
+            assertThat(show.getSlides().getFirst().getShapes()).filteredOn(XSLFTextBox.class::isInstance)
+                .map(XSLFTextShape.class::cast).filteredOn(shape -> shape.getText().contains("line two"))
+                .singleElement().satisfies(shape -> assertThat(shape.getWordWrap()).isTrue());
 
             List<XSLFPictureShape> pictures = show.getSlides().getFirst().getShapes().stream()
                 .filter(XSLFPictureShape.class::isInstance).map(XSLFPictureShape.class::cast).toList();
