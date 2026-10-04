@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 class ConversionControllerTest {
+    private static final String DEFAULT_EXPORT_SOURCE = "http://localhost:8088/test_report";
     private ConversionOperations operations;
     private MockMvc mvc;
 
@@ -34,7 +35,7 @@ class ConversionControllerTest {
             .addFilters(new CorrelationIdFilter()).build();
     }
 
-    @Test void returnsEachFormatWithSafeDownloadHeaders() throws Exception {
+    @Test void returnsEachFormatWithSafeDownloadHeadersForDefaultExportSource() throws Exception {
         expectSuccess("/MakeMHTML", OutputFormat.MHTML, "example.mhtml");
         expectSuccess("/MakeSnapshot", OutputFormat.MHTML, "example.mhtml");
         expectSuccess("/MakePDF", OutputFormat.PDF, "example.pdf");
@@ -76,8 +77,9 @@ class ConversionControllerTest {
 
     private void expectSuccess(String path, OutputFormat format, String filename) throws Exception {
         byte[] bytes = new byte[]{1, 2, 3};
-        when(operations.convert("https://example.org", format)).thenReturn(new ConversionResult(bytes, format, filename));
-        mvc.perform(post(path).contentType("application/json").header(CorrelationIdFilter.HEADER, "test-123").content("{\"url\":\"https://example.org\"}"))
+        when(operations.convert(DEFAULT_EXPORT_SOURCE, format)).thenReturn(new ConversionResult(bytes, format, filename));
+        mvc.perform(post(path).contentType("application/json").header(CorrelationIdFilter.HEADER, "test-123")
+                .content("{\"url\":\"" + DEFAULT_EXPORT_SOURCE + "\"}"))
             .andExpect(status().isOk()).andExpect(content().contentType(format.mediaType()))
             .andExpect(header().string(CorrelationIdFilter.HEADER, "test-123"))
             .andExpect(header().string("Content-Disposition", "attachment; filename=\"" + filename + "\""))

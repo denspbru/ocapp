@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Финансовая аналитика — Nordic Vector Holding</title>
+<style>
+  :root{
+    --ink:#1b2430; --muted:#5d6b7a; --line:#d9e0e7;
+    --accent:#1565c0; --accent-soft:#e3f2fd;
+    --green:#1e7e34; --red:#c62828;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#eef1f4;font-family:"Helvetica Neue",Arial,"Segoe UI",sans-serif;color:var(--ink);}
+  @page{size:13.333in 7.5in;margin:0;}
+  @media print{
+    html,body{background:#fff;}
+    .page{break-after:page;page-break-after:always;box-shadow:none !important;margin:0 auto !important;}
+    * {print-color-adjust:exact;-webkit-print-color-adjust:exact;}
+  }
+  .page{
+    width:1280px;height:720px;position:relative;overflow:hidden;
+    background:#ffffff;margin:24px auto;box-shadow:0 2px 18px rgba(0,0,0,.18);
+  }
+  .page:last-child{margin-bottom:24px;}
+  .pad{padding:56px 64px;}
+  .kicker{letter-spacing:.18em;text-transform:uppercase;font-size:13px;color:var(--accent);font-weight:700;}
+  h1{font-size:40px;margin:10px 0 6px;font-weight:700;}
+  h2{font-size:28px;margin:0 0 18px;font-weight:700;color:var(--ink);}
+  h3{font-size:18px;margin:0 0 8px;font-weight:700;}
+  p{line-height:1.55;font-size:15px;color:var(--muted);}
+
+  /* ---------- Page 1: Title ---------- */
+  #page-1{background:linear-gradient(135deg,#0d47a1 0%,#1565c0 45%,#1e88e5 100%);color:#fff;}
+  #page-1 .mark{position:absolute;top:-120px;right:-120px;width:420px;height:420px;border-radius:50%;background:rgba(255,255,255,.08);}
+  #page-1 .mark2{position:absolute;bottom:-160px;left:-140px;width:380px;height:380px;border-radius:50%;background:rgba(255,255,255,.07);}
+  #page-1 .inner{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:center;padding:0 96px;}
+  #page-1 .kicker{color:#bbdefb;}
+  #page-1 h1{font-size:56px;color:#fff;max-width:900px;}
+  #page-1 .subtitle{font-size:20px;color:#e3f2fd;margin-top:4px;}
+  #page-1 .meta-row{display:flex;gap:48px;margin-top:64px;}
+  #page-1 .meta-row div{border-left:2px solid rgba(255,255,255,.5);padding-left:16px;}
+  #page-1 .meta-row .label{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#bbdefb;}
+  #page-1 .meta-row .value{font-size:18px;font-weight:600;margin-top:4px;}
+  #page-1 .confidential{position:absolute;bottom:40px;left:96px;font-size:12px;color:#bbdefb;letter-spacing:.05em;}
+
+  /* ---------- Page 2: Contents ---------- */
+  #page-2 .toc-list{list-style:none;margin:0;padding:0;}
+  #page-2 .toc-list li{display:flex;align-items:baseline;padding:18px 0;border-bottom:1px solid var(--line);font-size:18px;}
+  #page-2 .toc-list .num{width:46px;font-size:22px;font-weight:700;color:var(--accent);}
+  #page-2 .toc-list .title{flex:1;font-weight:600;}
+  #page-2 .toc-list .dots{flex:1;border-bottom:2px dotted var(--line);margin:0 12px 6px;}
+  #page-2 .toc-list .pg{font-weight:700;color:var(--muted);}
+
+  /* ---------- Page 3: Charts ---------- */
+  #page-3 .charts-row{display:flex;gap:40px;margin-bottom:8px;}
+  #page-3 .chart-card{flex:1;border:1px solid var(--line);border-radius:10px;padding:20px 24px;}
+  #page-3 .chart-card .axis-label{font-size:11px;fill:var(--muted);}
+  #page-3 .legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:10px;font-size:12px;color:var(--muted);}
+  #page-3 .legend span{display:inline-flex;align-items:center;gap:6px;}
+  #page-3 .swatch{width:10px;height:10px;border-radius:2px;display:inline-block;}
+  #page-3 .summary{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+
+  /* ---------- Page 4: Key metrics ---------- */
+  #page-4 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:28px;}
+  #page-4 .kpi{border:1px solid var(--line);border-radius:10px;padding:18px 20px;background:#fafbfc;}
+  #page-4 .kpi .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+  #page-4 .kpi .value{font-size:26px;font-weight:700;margin-top:6px;}
+  #page-4 .kpi .delta{font-size:13px;font-weight:600;margin-top:4px;}
+  #page-4 .delta.up{color:var(--green);} #page-4 .delta.down{color:var(--red);}
+  #page-4 .risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;}
+  #page-4 .risk-card h3{color:var(--accent);}
+  #page-4 .risk-card ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;line-height:1.6;}
+
+  /* ---------- Page 5: Asset table ---------- */
+  #page-5 table{width:100%;border-collapse:collapse;font-size:16px;}
+  #page-5 thead th{
+    text-align:left;background:var(--accent);color:#fff;padding:14px 20px;font-size:13px;
+    text-transform:uppercase;letter-spacing:.04em;
+  }
+  #page-5 thead th:nth-child(2),#page-5 thead th:nth-child(3){text-align:right;}
+  #page-5 tbody td{padding:16px 20px;border-bottom:1px solid var(--line);}
+  #page-5 tbody tr:nth-child(even){background:#f7f9fb;}
+  #page-5 td:nth-child(2),#page-5 td:nth-child(3){text-align:right;font-variant-numeric:tabular-nums;}
+  #page-5 td.asset-name{font-weight:600;}
+  #page-5 .delta-positive{color:var(--green);font-weight:700;}
+  #page-5 .delta-negative{color:var(--red);font-weight:700;}
+  #page-5 .total-row td{border-top:2px solid var(--ink);font-weight:700;background:#fff;}
+  .page-footer{position:absolute;bottom:24px;left:64px;right:64px;display:flex;justify-content:space-between;
+    font-size:11px;color:#9aa7b2;border-top:1px solid var(--line);padding-top:10px;}
+</style>
+</head>
+<body>
+
+<!-- ================= PAGE 1: TITLE ================= -->
+<section id="page-1" class="page" data-pptx-slide="new" data-pptx-title="Титульный лист">
+  <div class="mark"></div><div class="mark2"></div>
+  <div class="inner">
+    <div class="kicker">Годовой финансовый отчёт · FY2026</div>
+    <h1>Nordic Vector Holding</h1>
+    <div class="subtitle">Финансовая аналитика и структура капитала</div>
+    <div class="meta-row">
+      <div><div class="label">Подготовлено</div><div class="value">Отдел финансового анализа</div></div>
+      <div><div class="label">Дата отчёта</div><div class="value">02 октября 2026</div></div>
+      <div><div class="label">Период</div><div class="value">Январь — Декабрь 2026</div></div>
+    </div>
+  </div>
+  <div class="confidential">Конфиденциально · Только для внутреннего использования</div>
+</section>
+
+<!-- ================= PAGE 2: CONTENTS ================= -->
+<section id="page-2" class="page pad" data-pptx-slide="new" data-pptx-title="Содержание">
+  <div class="kicker">Обзор</div>
+  <h2>Содержание</h2>
+  <ul class="toc-list">
+    <li><span class="num">01</span><span class="title">Титульный лист</span><span class="dots"></span><span class="pg">стр. 1</span></li>
+    <li><span class="num">02</span><span class="title">Содержание</span><span class="dots"></span><span class="pg">стр. 2</span></li>
+    <li><span class="num">03</span><span class="title">Доходность капитала и структура капитала</span><span class="dots"></span><span class="pg">стр. 3</span></li>
+    <li><span class="num">04</span><span class="title">Ключевые показатели и риски</span><span class="dots"></span><span class="pg">стр. 4</span></li>
+    <li><span class="num">05</span><span class="title">Портфель активов</span><span class="dots"></span><span class="pg">стр. 5</span></li>
+  </ul>
+</section>
+
+<!-- ================= PAGE 3: CHARTS ================= -->
+<section id="page-3" class="page pad" data-pptx-slide="new" data-pptx-title="Доходность и структура капитала">
+  <div class="kicker">Финансовая аналитика</div>
+  <h2>Доходность капитала и структура капитала</h2>
+  <div class="charts-row">
+    <div class="chart-card">
+      <h3>Доходность капитала за год, индекс (база = 100)</h3>
+      <svg viewBox="0 0 760 220" width="100%" height="200" data-pptx-chart>
+        <line x1="40" y1="20" x2="40" y2="190" stroke="#d9e0e7"/>
+        <line x1="40" y1="190" x2="740" y2="190" stroke="#d9e0e7"/>
+        <text x="30" y="24" class="axis-label" text-anchor="end">140</text>
+        <text x="30" y="194" class="axis-label" text-anchor="end">95</text>
+        <polyline fill="none" stroke="#1565c0" stroke-width="3"
+          points="40.0,171.1 103.6,160.7 167.3,171.5 230.9,173.5 294.5,177.2 358.2,163.7 421.8,151.8 485.5,131.8 549.1,141.0 612.7,137.8 676.4,149.0 740.0,153.1"/>
+        <polygon fill="#1565c0" opacity="0.08"
+          points="40.0,171.1 103.6,160.7 167.3,171.5 230.9,173.5 294.5,177.2 358.2,163.7 421.8,151.8 485.5,131.8 549.1,141.0 612.7,137.8 676.4,149.0 740.0,153.1 740.0,190 40.0,190"/>
+        <circle cx="40.0" cy="171.1" r="3.5" fill="#1565c0"/>
+        <circle cx="103.6" cy="160.7" r="3.5" fill="#1565c0"/>
+        <circle cx="167.3" cy="171.5" r="3.5" fill="#1565c0"/>
+        <circle cx="230.9" cy="173.5" r="3.5" fill="#1565c0"/>
+        <circle cx="294.5" cy="177.2" r="3.5" fill="#1565c0"/>
+        <circle cx="358.2" cy="163.7" r="3.5" fill="#1565c0"/>
+        <circle cx="421.8" cy="151.8" r="3.5" fill="#1565c0"/>
+        <circle cx="485.5" cy="131.8" r="3.5" fill="#1565c0"/>
+        <circle cx="549.1" cy="141.0" r="3.5" fill="#1565c0"/>
+        <circle cx="612.7" cy="137.8" r="3.5" fill="#1565c0"/>
+        <circle cx="676.4" cy="149.0" r="3.5" fill="#1565c0"/>
+        <circle cx="740.0" cy="153.1" r="3.5" fill="#1565c0"/>
+        <text x="40.0" y="212" class="axis-label" text-anchor="middle">Янв</text>
+        <text x="103.6" y="212" class="axis-label" text-anchor="middle">Фев</text>
+        <text x="167.3" y="212" class="axis-label" text-anchor="middle">Мар</text>
+        <text x="230.9" y="212" class="axis-label" text-anchor="middle">Апр</text>
+        <text x="294.5" y="212" class="axis-label" text-anchor="middle">Май</text>
+        <text x="358.2" y="212" class="axis-label" text-anchor="middle">Июн</text>
+        <text x="421.8" y="212" class="axis-label" text-anchor="middle">Июл</text>
+        <text x="485.5" y="212" class="axis-label" text-anchor="middle">Авг</text>
+        <text x="549.1" y="212" class="axis-label" text-anchor="middle">Сен</text>
+        <text x="612.7" y="212" class="axis-label" text-anchor="middle">Окт</text>
+        <text x="676.4" y="212" class="axis-label" text-anchor="middle">Ноя</text>
+        <text x="740.0" y="212" class="axis-label" text-anchor="middle">Дек</text>
+      </svg>
+      <div class="legend"><span><span class="swatch" style="background:#1565c0"></span>Индекс стоимости капитала, рост за год +4.8%</span></div>
+    </div>
+    <div class="chart-card">
+      <h3>Структура капитала, sunburst</h3>
+      <svg viewBox="0 0 340 340" width="100%" height="200" data-pptx-chart>
+        <path d="M 170.00 70.00 A 100 100 0 0 1 170.00 270.00 L 170.00 230.00 A 60 60 0 0 0 170.00 110.00 Z" fill="#2e7d32"/>
+        <path d="M 170.00 270.00 A 100 100 0 0 1 74.89 139.10 L 112.94 151.46 A 60 60 0 0 0 170.00 230.00 Z" fill="#1565c0"/>
+        <path d="M 74.89 139.10 A 100 100 0 0 1 170.00 70.00 L 170.00 110.00 A 60 60 0 0 0 112.94 151.46 Z" fill="#ef6c00"/>
+        <path d="M 170.00 30.00 A 140 140 0 0 1 303.15 213.26 L 268.91 202.14 A 104 104 0 0 0 170.00 66.00 Z" fill="#66bb6a"/>
+        <path d="M 303.15 213.26 A 140 140 0 0 1 170.00 310.00 L 170.00 274.00 A 104 104 0 0 0 268.91 202.14 Z" fill="#a5d6a7"/>
+        <path d="M 170.00 310.00 A 140 140 0 0 1 36.85 213.26 L 71.09 202.14 A 104 104 0 0 0 170.00 274.00 Z" fill="#42a5f5"/>
+        <path d="M 36.85 213.26 A 140 140 0 0 1 36.85 126.74 L 71.09 137.86 A 104 104 0 0 0 71.09 202.14 Z" fill="#90caf9"/>
+        <path d="M 36.85 126.74 A 140 140 0 0 1 102.55 47.32 L 119.90 78.86 A 104 104 0 0 0 71.09 137.86 Z" fill="#ffa726"/>
+        <path d="M 102.55 47.32 A 140 140 0 0 1 170.00 30.00 L 170.00 66.00 A 104 104 0 0 0 119.90 78.86 Z" fill="#ffcc80"/>
+        <circle cx="170" cy="170" r="58" fill="#ffffff"/>
+        <text x="170" y="165" text-anchor="middle" font-size="13" font-weight="700" fill="#1b2430">Капитал</text>
+        <text x="170" y="182" text-anchor="middle" font-size="11" fill="#5d6b7a">100%</text>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:#2e7d32"></span>Собственный капитал — 50%</span>
+        <span><span class="swatch" style="background:#1565c0"></span>Долгоср. обязательства — 30%</span>
+        <span><span class="swatch" style="background:#ef6c00"></span>Краткоср. обязательства — 20%</span>
+      </div>
+    </div>
+  </div>
+  <div class="summary">
+    <h3>Общее состояние компании</h3>
+    <p>Nordic Vector Holding завершила отчётный год с ростом индекса стоимости капитала на 4.8%, несмотря на
+      просадку в весенний период, вызванную разовой переоценкой запасов. Структура капитала остаётся консервативной:
+      собственный капитал формирует половину баланса, долговая нагрузка распределена между долгосрочными облигационными
+      займами (20%) и краткосрочными кредитными линиями (20%), что обеспечивает компании комфортный запас ликвидности
+      и устойчивость к краткосрочным колебаниям процентных ставок.</p>
+  </div>
+  <div class="page-footer"><span>Nordic Vector Holding · Годовой отчёт FY2026</span><span>стр. 3 / 5</span></div>
+</section>
+
+<!-- ================= PAGE 4: KEY METRICS & RISKS ================= -->
+<section id="page-4" class="page pad" data-pptx-slide="new" data-pptx-title="Ключевые показатели и риски">
+  <div class="kicker">Финансовая аналитика</div>
+  <h2>Ключевые показатели и риски</h2>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="label">Выручка</div><div class="value">€248.6 млн</div><div class="delta up">▲ +6.2% г/г</div></div>
+    <div class="kpi"><div class="label">Чистая прибыль</div><div class="value">€31.4 млн</div><div class="delta up">▲ +4.8% г/г</div></div>
+    <div class="kpi"><div class="label">Рентабельность капитала (ROE)</div><div class="value">14.7%</div><div class="delta up">▲ +0.9 п.п.</div></div>
+    <div class="kpi"><div class="label">Долг / капитал</div><div class="value">0.58x</div><div class="delta down">▼ -0.04x</div></div>
+  </div>
+  <div class="risk-grid">
+    <div class="risk-card">
+      <h3>Драйверы роста</h3>
+      <ul>
+        <li>Расширение портфеля облигационных размещений на новых рынках</li>
+        <li>Снижение стоимости фондирования после рефинансирования краткосрочных кредитов</li>
+        <li>Рост доли высокомаржинальных активов в портфеле</li>
+      </ul>
+    </div>
+    <div class="risk-card">
+      <h3>Ключевые риски</h3>
+      <ul>
+        <li>Волатильность котировок сырьевых активов в структуре портфеля</li>
+        <li>Чувствительность облигационного портфеля к изменению ключевой ставки</li>
+        <li>Концентрация краткосрочных обязательств в первом полугодии</li>
+      </ul>
+    </div>
+  </div>
+  <div class="page-footer"><span>Nordic Vector Holding · Годовой отчёт FY2026</span><span>стр. 4 / 5</span></div>
+</section>
+
+<!-- ================= PAGE 5: ASSET TABLE ================= -->
+<section id="page-5" class="page pad" data-pptx-slide="new" data-pptx-title="Портфель активов">
+  <div class="kicker">Финансовая аналитика</div>
+  <h2>Портфель активов</h2>
+  <table>
+    <thead>
+      <tr><th>Название актива</th><th>Текущая стоимость</th><th>Изм. к пред. периоду</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="asset-name">Облигации Nordic Vector 2029</td><td>€42,850,000</td><td class="delta-positive">+3.4%</td></tr>
+      <tr><td class="asset-name">Акции дочерней компании Vector Logistics</td><td>€28,120,000</td><td class="delta-negative">-1.8%</td></tr>
+      <tr><td class="asset-name">Коммерческая недвижимость, Осло</td><td>€19,400,000</td><td class="delta-positive">+0.6%</td></tr>
+      <tr><td class="asset-name">Денежные средства и эквиваленты</td><td>€11,275,000</td><td class="delta-negative">-4.2%</td></tr>
+      <tr><td class="asset-name">Товарно-сырьевой портфель (металлы)</td><td>€9,640,000</td><td class="delta-positive">+7.1%</td></tr>
+      <tr><td class="asset-name">Венчурные инвестиции, портфель II</td><td>€6,980,000</td><td class="delta-negative">-2.5%</td></tr>
+      <tr><td class="asset-name">Государственные облигации EUR</td><td>€5,310,000</td><td class="delta-positive">+1.2%</td></tr>
+      <tr class="total-row"><td>Итого по портфелю</td><td>€123,575,000</td><td class="delta-positive">+1.9%</td></tr>
+    </tbody>
+  </table>
+  <div class="page-footer"><span>Nordic Vector Holding · Годовой отчёт FY2026</span><span>стр. 5 / 5</span></div>
+</section>
+
+<div id="render-ready" style="display:none">ready</div>
+</body>
+</html>

@@ -18,6 +18,14 @@ import org.springframework.test.web.servlet.MockMvc;
 class ApiIntegrationTest {
     @Autowired MockMvc mvc;
 
+    @Test void servesBundledDefaultExportSource() throws Exception {
+        mvc.perform(get("/test_report"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith("text/html"))
+            .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Nordic Vector Holding")));
+    }
+
     @Test void realAdviceOwnsJacksonUnknownFieldErrors() throws Exception {
         mvc.perform(post("/MakePDF").header(CorrelationIdFilter.HEADER, "integration-123")
                 .contentType("application/json").content("{\"url\":\"https://example.org\",\"extra\":true}"))

@@ -6,7 +6,7 @@
 
 ## 2. API
 
-Все операции — `POST`, `Content-Type: application/json`, body `{"url":"https://example.org/report"}`.
+Все export-операции — `POST`, `Content-Type: application/json`, body `{"url":"http://localhost:8088/test_report"}`. `GET /test_report` отдаёт встроенный self-contained HTML source для примеров и manual/E2E; поле `url` остаётся обязательным, а loopback source не обходит SSRF policy.
 
 | Операция | Статус | Результат |
 |---|---|---|

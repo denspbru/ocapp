@@ -10,11 +10,12 @@ OCApp — Java 21 REST-сервис, который загружает веб-с
 | `POST /MakeSnapshot` | MHTML (`.mhtml`), совместимый alias | `application/x-mimearchive` |
 | `POST /MakePDF` | PDF (`.pdf`) | `application/pdf` |
 | `POST /MakePPTX` | PPTX (`.pptx`) | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+| `GET /test_report` | Встроенный self-contained HTML-отчёт для export examples/manual E2E | `text/html` |
 
-`/MakeMHTML` — канонический MHTML route; `/MakeSnapshot` сохранён для обратной совместимости. Все операции принимают ровно такой JSON:
+`/MakeMHTML` — канонический MHTML route; `/MakeSnapshot` сохранён для обратной совместимости. Все export-операции принимают ровно такой JSON; встроенный `/test_report` используется как source в примерах по умолчанию:
 
 ```json
-{"url":"https://example.org/report"}
+{"url":"http://localhost:8088/test_report"}
 ```
 
 Пример:
@@ -23,8 +24,10 @@ OCApp — Java 21 REST-сервис, который загружает веб-с
 curl --fail-with-body -X POST http://localhost:8088/MakeMHTML \
   -H 'Content-Type: application/json' \
   -H 'X-Correlation-ID: example-1' \
-  -d '{"url":"https://example.org/"}' -o page.mhtml
+  -d '{"url":"http://localhost:8088/test_report"}' -o test-report.mhtml
 ```
+
+Поле `url` по-прежнему обязательно: API не подставляет source неявно. Loopback source не получает исключения из SSRF policy; для локального self-export запустите явно доверенный local E2E mode из раздела «Безопасный запуск». Production/private-host policy остаётся deny-by-default.
 
 Успех: `200`, точный `Content-Length`, MIME type, `Content-Disposition: attachment` и `X-Correlation-ID`. Spring MVC protocol errors сохраняют исходные статусы и headers (`404`, `405` с `Allow`, `415`); только неожиданные ошибки становятся `500`. Фактический top-level browser GET со статусом `4xx/5xx` отклоняется как `422 TARGET_HTTP_ERROR`.
 
@@ -60,7 +63,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 Встроенный default — `converter.security.egress-mode=PROXY` с пустым `proxy-url`, поэтому приложение **намеренно не запускается**, пока validating proxy не настроен:
 
 ```bash
-java -jar target/ocapp-0.2.0.jar \
+java -jar target/ocapp-0.2.1.jar \
   --converter.security.proxy-url=http://proxy.internal:3128 \
   --converter.browser.binary=/usr/bin/chromium \
   --converter.browser.driver-path=/usr/bin/chromedriver
