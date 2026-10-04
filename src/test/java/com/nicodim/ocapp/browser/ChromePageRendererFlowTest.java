@@ -204,7 +204,7 @@ class ChromePageRendererFlowTest {
     @Test void maxSlideFailureOccursBeforeScreenshotCaptureOrPoiCreation() {
         ChromePageRenderer rejecting = spy(renderer);
         doThrow(new ConversionException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE,
-            "PPTX_MAX_SLIDES_EXCEEDED", "too many")).when(rejecting).preparePagination(driver);
+            "PPTX_MAX_SLIDES_EXCEEDED", "too many")).when(rejecting).preparePptx(driver);
         assertCode(() -> rejecting.render(URI.create("https://example.org/"), OutputFormat.PPTX), "PPTX_MAX_SLIDES_EXCEEDED");
         verify(driver, never()).executeCdpCommand(eq("Page.captureScreenshot"), anyMap());
     }

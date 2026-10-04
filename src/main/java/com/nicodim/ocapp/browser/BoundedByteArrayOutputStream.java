@@ -4,10 +4,10 @@ import com.nicodim.ocapp.support.ConversionException;
 import java.io.ByteArrayOutputStream;
 import org.springframework.http.HttpStatus;
 
-final class BoundedByteArrayOutputStream extends ByteArrayOutputStream {
+public final class BoundedByteArrayOutputStream extends ByteArrayOutputStream {
     private final long maximum;
 
-    BoundedByteArrayOutputStream(long maximum) {
+    public BoundedByteArrayOutputStream(long maximum) {
         super((int) Math.min(maximum, 8192));
         this.maximum = maximum;
     }

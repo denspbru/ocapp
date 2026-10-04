@@ -1,6 +1,6 @@
 # Roadmap интеллектуальной PPTX-конвертации
 
-Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-02.
+Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-04.
 
 ## 1. Цель и границы
 
@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код после M2 smart screenshot pagination. Компоненты M3+ из последующих разделов ещё не являются текущим контрактом.
+Ниже описан код активной M3 editable text/images реализации на feature branch. Компоненты M4+ из последующих разделов ещё не являются текущим контрактом.
 
 ### HTTP и orchestration
 
@@ -57,9 +57,9 @@ Chromium остаётся источником истины для вычисл�
 
 - [`DomPageExtractor`](../src/main/java/com/nicodim/ocapp/pagemodel/DomPageExtractor.java) строит и валидирует bounded `PageModel`; [`SmartPaginationPlanner`](../src/main/java/com/nicodim/ocapp/pagination/SmartPaginationPlanner.java) выдаёт renderer-independent exact-coverage `PaginationPlan`.
 - Break priority: explicit slide hint, whitespace, block boundary, deterministic fallback. Planner защищает помещающиеся text/image/table/chart, `keepTogether`, transformed/overlapping blocks и heading с последующим content; oversized blocks получают стабильный warning.
-- [`ChromePageRenderer.capturePptx(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) получает один bounded full-page PNG через CDP, переводит CSS slices в screenshot pixels с exact coverage и помещает каждый full-width crop без distortion на отдельный 16:9 slide.
-- Smart pagination включена по умолчанию. Extraction/planner error может перейти в legacy fixed-height slicing; `PPTX_MAX_SLIDES_EXCEEDED` не fallback-ится и возникает до screenshot/POI.
-- Результат остаётся visual/image-only. Native/editable objects, localized fallback, margins/footer/numbering и public mode contract ещё не реализованы.
+- [`ChromePageRenderer.capturePptx(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) получает один bounded full-page PNG через CDP. При `editable-enabled=true` validated PageModel и PaginationPlan передаются deterministic M3 planner/POI renderer-у; при `false` сохраняются M2 full-width visual slices.
+- M3 создаёт native XSLF text boxes (runs, font/style/color, alignment, line spacing, safe hyperlinks), native embedded raster pictures с aspect-preserving fit и простые background shapes. LIST/TABLE, SVG/Canvas/chart, transforms, clipping, overlap groups, unsupported styles/assets и split native candidates получают localized screenshot crops без двойной отрисовки.
+- Smart pagination включена по умолчанию. Extraction/planner error может перейти в legacy fixed-height slicing; `PPTX_MAX_SLIDES_EXCEEDED` не fallback-ится и возникает до screenshot/POI. Margins/footer/numbering и public mode contract ещё не реализованы.
 - [`ChromePageRenderer.validateArtifact(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) для PPTX проверяет ZIP-сигнатуру; структурная/visual validation полного уровня относится к M8.
 
 ### Безопасность, ресурсы и тесты
@@ -210,7 +210,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M3 — редактируемые text и images
 
-- **Status:** planned
+- **Status:** in progress on feature branch; implementation and automated structural/mixed-browser checks complete, office-rendered visual regression remains unproven
 - **Target version:** `0.3`
 - **Issue:** [#13 — editable text and images](https://github.com/denspbru/ocapp/issues/13)
 - **Dependencies:** M1, M2.
@@ -447,10 +447,11 @@ Native objects не обязательны. Этот mode должен оста�
 | 2026-09-30 | Сохранять localized screenshot fallback как обязательный механизм | Сложный CSS, overlap, Canvas и ошибки extraction не должны приводить к потере content | Fallback — нормальный quality path, а не исключительный failure |
 | 2026-09-30 | Ввести PageModel как boundary | Browser extraction, analysis/pagination и POI rendering должны развиваться и тестироваться независимо | PageModel не зависит от Selenium/CDP DTO и Apache POI |
 | 2026-09-30 | Разрешать AI только как optional explicit opt-in | Конвертация должна работать локально, предсказуемо и без скрытой передачи данных | Visual/editable modes не используют AI; summary имеет deterministic baseline |
+| 2026-10-04 | Включить M3 hybrid renderer по умолчанию с operator compatibility switch | Issue #13 должен работать через существующий `/MakePPTX`, но M2 visual output нужен для rollback/compatibility | `converter.pptx.editable-enabled=false` возвращает DOM-aware full-width screenshot path; extraction/planner failure сохраняет legacy fixed slicing |
 
 ## 12. Open questions
 
-1. Какой exact default должен получить `POST /MakePPTX` после M2/M3: legacy `visual`, smart `visual` или `editable`, и нужен ли versioned endpoint для изменения default?
+1. Нужен ли versioned public `mode` contract поверх operator-level `converter.pptx.editable-enabled`, и как мигрировать default при появлении такого поля?
 2. Должен ли API возвращать warnings/metrics через headers, sidecar JSON endpoint, multipart response или отдельный asynchronous job contract?
 3. Как версионировать `PageModel` и `data-pptx-*`: внутренний schema version, публичный contract version или оба?
 4. Какие thresholds считаются достаточными для native rendering: supported CSS allowlist, overlap tolerance, fallback area ratio и font substitution policy?

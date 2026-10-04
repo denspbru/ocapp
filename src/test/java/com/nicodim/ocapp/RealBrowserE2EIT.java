@@ -135,9 +135,16 @@ class RealBrowserE2EIT {
         assertThat(pptx.disposition()).contains(".pptx");
         assertThat(pptx.body()).startsWith((byte) 'P', (byte) 'K', (byte) 3, (byte) 4);
         assertThat(presentationContainsBlueCanvas(pptx.body())).isTrue();
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(pptx.body()))) {
+            assertThat(show.getSlides()).anySatisfy(slide -> {
+                assertThat(slide.getShapes()).anyMatch(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance);
+                assertThat(slide.getShapes()).filteredOn(org.apache.poi.xslf.usermodel.XSLFPictureShape.class::isInstance)
+                    .anySatisfy(shape -> assertThat(shape.getAnchor().getWidth()).isLessThan(show.getPageSize().getWidth()));
+            });
+        }
     }
 
-    @Test void paginatesTallPageIntoOrderedDomAwareScreenshotSlides() throws Exception {
+    @Test void paginatesTallPageIntoOrderedVisuallyEquivalentSlides() throws Exception {
         Response response = post("/MakePPTX", fixtureBase + "/tall-pptx");
         assertThat(response.status()).withFailMessage("PPTX response: %s", new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
         assertThat(response.contentType()).startsWith("application/vnd.openxmlformats-officedocument.presentationml.presentation");
@@ -145,13 +152,9 @@ class RealBrowserE2EIT {
             assertThat(show.getSlides()).hasSize(3);
             int[][] expected = {{220,40,40},{40,180,60},{40,80,220}};
             for (int i = 0; i < expected.length; i++) {
-                var picture = (org.apache.poi.xslf.usermodel.XSLFPictureShape) show.getSlides().get(i).getShapes().getFirst();
-                BufferedImage image = ImageIO.read(new ByteArrayInputStream(picture.getPictureData().getData()));
-                int rgb = image.getRGB(image.getWidth()/2, image.getHeight()/2);
-                int[] actual = {(rgb>>>16)&255,(rgb>>>8)&255,rgb&255};
-                assertThat(actual).withFailMessage("slide %s center rgb", i).containsExactly(expected[i]);
-                assertThat(picture.getAnchor().getWidth()/picture.getAnchor().getHeight())
-                    .isCloseTo((double) image.getWidth()/image.getHeight(), org.assertj.core.data.Offset.offset(0.000_001));
+                java.awt.Color center = slideCenterColor(show, i);
+                assertThat(new int[]{center.getRed(), center.getGreen(), center.getBlue()})
+                    .withFailMessage("slide %s center rgb", i).containsExactly(expected[i]);
             }
         }
     }
@@ -291,6 +294,25 @@ class RealBrowserE2EIT {
         exchange.sendResponseHeaders(200, body.length);
         exchange.getResponseBody().write(body);
         exchange.close();
+    }
+
+    private static java.awt.Color slideCenterColor(XMLSlideShow show, int index) throws IOException {
+        double x = show.getPageSize().getWidth() / 2d, y = show.getPageSize().getHeight() / 2d;
+        var shapes = show.getSlides().get(index).getShapes();
+        for (int i = shapes.size() - 1; i >= 0; i--) {
+            var shape = shapes.get(i);
+            if (!shape.getAnchor().contains(x, y)) continue;
+            if (shape instanceof org.apache.poi.xslf.usermodel.XSLFPictureShape picture) {
+                BufferedImage image = ImageIO.read(new ByteArrayInputStream(picture.getPictureData().getData()));
+                double rx = (x - picture.getAnchor().getX()) / picture.getAnchor().getWidth();
+                double ry = (y - picture.getAnchor().getY()) / picture.getAnchor().getHeight();
+                return new java.awt.Color(image.getRGB(Math.min(image.getWidth() - 1, (int) (rx * image.getWidth())),
+                    Math.min(image.getHeight() - 1, (int) (ry * image.getHeight()))));
+            }
+            if (shape instanceof org.apache.poi.xslf.usermodel.XSLFSimpleShape simple && simple.getFillColor() != null)
+                return simple.getFillColor();
+        }
+        throw new AssertionError("No shape covers slide center");
     }
 
     private static boolean presentationContainsBlueCanvas(byte[] bytes) throws IOException {

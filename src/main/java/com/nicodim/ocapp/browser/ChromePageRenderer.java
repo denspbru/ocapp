@@ -10,6 +10,7 @@ import com.nicodim.ocapp.pagination.PaginationOptions;
 import com.nicodim.ocapp.pagination.PaginationPlan;
 import com.nicodim.ocapp.pagination.SlideSlice;
 import com.nicodim.ocapp.pagination.SmartPaginationPlanner;
+import com.nicodim.ocapp.pptx.HybridPptxRenderer;
 import com.nicodim.ocapp.security.UrlSecurityPolicy;
 import com.nicodim.ocapp.support.ConversionException;
 import java.awt.Dimension;
@@ -94,8 +95,8 @@ public class ChromePageRenderer implements PageRenderer {
                 case MHTML -> captureMhtml(driver);
                 case PDF -> capturePdf(driver);
                 case PPTX -> {
-                    PaginationPlan plan = preparePagination(driver);
-                    yield capturePptx(driver, plan);
+                    PreparedPptx prepared = preparePptx(driver);
+                    yield capturePptx(driver, prepared);
                 }
             };
             throwBlocked(blockedRequest);
@@ -285,11 +286,12 @@ public class ChromePageRenderer implements PageRenderer {
         }
     }
 
-    PaginationPlan preparePagination(ChromeDriver driver) {
+    PreparedPptx preparePptx(ChromeDriver driver) {
         var ppt = properties.getPptx();
         if (!ppt.isSmartPaginationEnabled()) return null;
         try {
-            return planPageModel(extractPageModel(driver));
+            PageModel model = extractPageModel(driver);
+            return new PreparedPptx(model, planPageModel(model));
         } catch (RuntimeException ex) {
             if (ex instanceof ConversionException conversion
                 && "PPTX_MAX_SLIDES_EXCEEDED".equals(conversion.code())) throw conversion;
@@ -299,6 +301,12 @@ public class ChromePageRenderer implements PageRenderer {
             }
             return null;
         }
+    }
+
+    /** Retained package-level helper for pagination-only tests and visual compatibility callers. */
+    PaginationPlan preparePagination(ChromeDriver driver) {
+        PreparedPptx prepared = preparePptx(driver);
+        return prepared == null ? null : prepared.plan();
     }
 
     PageModel extractPageModel(ChromeDriver driver) {
@@ -312,13 +320,28 @@ public class ChromePageRenderer implements PageRenderer {
             ppt.getMinSliceHeightPixels(), ppt.getMaxSlides()));
     }
 
-    private byte[] capturePptx(ChromeDriver driver, PaginationPlan plan) {
+    private byte[] capturePptx(ChromeDriver driver, PreparedPptx prepared) {
         Object data = driver.executeCdpCommand("Page.captureScreenshot", Map.of(
             "format", "png", "captureBeyondViewport", true, "fromSurface", true)).get("data");
         if (!(data instanceof String encoded)) throw new IllegalStateException("Chrome returned no screenshot data");
         byte[] screenshot = decodeBase64(encoded, properties.getLimits().getMaxScreenshotBytes());
         validatePngHeader(screenshot);
-        return createPresentation(screenshot, plan);
+        if (prepared == null) return createPresentation(screenshot, null);
+        if (!properties.getPptx().isEditableEnabled()) return createPresentation(screenshot, prepared.plan());
+        return createEditablePresentation(screenshot, prepared.model(), prepared.plan());
+    }
+
+    byte[] createEditablePresentation(byte[] screenshot, PageModel model, PaginationPlan plan) {
+        validatePngHeader(screenshot);
+        try {
+            BufferedImage source = ImageIO.read(new ByteArrayInputStream(screenshot));
+            if (source == null) throw new IOException("Unsupported screenshot");
+            return new HybridPptxRenderer(properties).render(source, model, plan);
+        } catch (ConversionException ex) { throw ex; }
+        catch (IOException ex) {
+            throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PPTX_CREATION_FAILED",
+                "Editable presentation could not be created", ex);
+        }
     }
 
     static byte[] decodeBase64(String encoded, long maximum) {
@@ -435,6 +458,13 @@ public class ChromePageRenderer implements PageRenderer {
 
     private static ConversionException maxSlides() {
         return new ConversionException(HttpStatus.PAYLOAD_TOO_LARGE, "PPTX_MAX_SLIDES_EXCEEDED", "Page requires more slides than configured");
+    }
+
+    record PreparedPptx(PageModel model, PaginationPlan plan) {
+        PreparedPptx {
+            java.util.Objects.requireNonNull(model, "model");
+            java.util.Objects.requireNonNull(plan, "plan");
+        }
     }
 
     private record PixelSlice(int y, int height) { }

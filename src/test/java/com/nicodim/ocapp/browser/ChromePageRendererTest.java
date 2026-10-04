@@ -113,6 +113,26 @@ class ChromePageRendererTest {
         ChromePageRenderer.validateArtifact(renderer.createPresentation(png(10, 10)), OutputFormat.PPTX);
     }
 
+    @Test void createsEditablePresentationThroughChromeIntegrationBoundary() throws Exception {
+        var style = new com.nicodim.ocapp.pagemodel.ComputedStyle("block", "static", "visible", "visible",
+            "black", "transparent", "Arial", 16, 400, "normal", "left", 19.2, 1, 0, false, false);
+        var block = new com.nicodim.ocapp.pagemodel.PageBlock("text", com.nicodim.ocapp.pagemodel.BlockType.TEXT,
+            "", List.of(), 0, 0, 0, new com.nicodim.ocapp.pagemodel.Bounds(0, 0, 40, 10), null,
+            com.nicodim.ocapp.pagemodel.TransformSummary.none(), List.of(), style,
+            List.of(new com.nicodim.ocapp.pagemodel.TextRun("editable", style)), List.of(), null, null, List.of(),
+            com.nicodim.ocapp.pagemodel.AuthoringHints.none(), List.of());
+        var model = new com.nicodim.ocapp.pagemodel.PageModel(com.nicodim.ocapp.pagemodel.PageModel.SCHEMA_VERSION,
+            new com.nicodim.ocapp.pagemodel.DocumentMetadata(java.net.URI.create("https://example.org"), "", ""),
+            new com.nicodim.ocapp.pagemodel.CaptureMetadata("Chrome", "en", "UTC", 1, "complete", List.of()),
+            new com.nicodim.ocapp.pagemodel.PageGeometry(100, 50, new com.nicodim.ocapp.pagemodel.Bounds(0, 0, 100, 50), 0, 0),
+            List.of(block), List.of("text"), List.of(), List.of());
+        byte[] bytes = renderer.createEditablePresentation(png(100, 50), model, plan(100, 50, 50));
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
+            assertThat(show.getSlides().getFirst().getShapes()).singleElement()
+                .isInstanceOf(org.apache.poi.xslf.usermodel.XSLFTextShape.class);
+        }
+    }
+
     @Test void rejectsOversizedPngFromIhdrBeforeImageIoAllocation() throws Exception {
         byte[] image = png(10, 10);
         image[16] = 0; image[17] = 1; image[18] = (byte) 0x86; image[19] = (byte) 0xa0;

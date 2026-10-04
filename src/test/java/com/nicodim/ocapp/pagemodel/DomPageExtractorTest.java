@@ -100,6 +100,17 @@ class DomPageExtractorTest {
         assertThat(new DomPageExtractor(limits).limitMap()).containsEntry("field",16).containsEntry("metadata",64);
     }
 
+    @Test void permitsBoundedEmbeddedDataAssetsBeyondMetadataFieldLimit(){
+        limits.setMaxFieldLength(16);
+        String data="data:image/png;base64,"+"A".repeat(100);
+        Map<String,Object> embedded=asset("a","IMAGE",data,75,true);
+        Map<String,Object> image=block("image","IMAGE","",0,0);image.put("assets",List.of(embedded));
+        PageModel model=DomPageExtractor.fromScriptResult(result(List.of(image),List.of(embedded)),URI.create("https://x.test"),limits);
+        assertThat(model.assets()).singleElement().satisfies(a->assertThat(a.uri().toString()).isEqualTo(data));
+        limits.setMaxAssetBytes(50);
+        assertLimit(result(List.of(image),List.of(embedded)));
+    }
+
     @ParameterizedTest @MethodSource("malformedModels")
     void rejectsMalformedForestNumericAndSemanticModels(Map<String,Object> value){
         assertCode(()->DomPageExtractor.fromScriptResult(value,URI.create("https://x.test"),limits),"PAGEMODEL_INVALID");

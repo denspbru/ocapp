@@ -114,8 +114,10 @@ converter.security.allow-private-addresses=true
 | `converter.limits.max-capture-pixels` | `100000000` | Pre-allocation pixel limit |
 | `converter.limits.max-screenshot-bytes` | `52428800` | Base64 decoded screenshot limit |
 | `converter.pptx.max-slides` | `100` | Верхняя граница плана; превышение даёт `PPTX_MAX_SLIDES_EXCEEDED` до screenshot/POI |
-| `converter.pptx.smart-pagination-enabled` | `true` | DOM-aware screenshot pagination по PageModel |
+| `converter.pptx.smart-pagination-enabled` | `true` | DOM-aware pagination по PageModel |
+| `converter.pptx.editable-enabled` | `true` | Hybrid M3: native text/images/simple backgrounds плюс localized screenshot fallback; `false` сохраняет M2 full-width visual slices |
 | `converter.pptx.legacy-fallback-enabled` | `true` | При ошибке extraction/planner использовать прежние fixed-height slices; max-slides не fallback-ится |
+| `converter.pptx.max-items-per-slide` | `1000` | Pre-POI shape budget; при превышении slide безопасно сворачивается в один screenshot crop |
 | `converter.pptx.min-slice-height-pixels` | `120` | Минимальная CSS-высота эвристического/explicit slice |
 | `converter.page-model.max-blocks` / `max-depth` | `5000` / `64` | DOM model graph bounds до materialization |
 | `converter.page-model.max-text-length` / `max-table-cells` | `1000000` / `20000` | Общий text и table-cell budgets |
@@ -140,7 +142,11 @@ Chromium по-прежнему создаёт один full-page PNG в уже �
 
 Если extraction или planner завершается ошибкой и `converter.pptx.legacy-fallback-enabled=true`, renderer использует прежнее fixed-height slicing. `PPTX_MAX_SLIDES_EXCEEDED` никогда не fallback-ится и возвращается до screenshot/POI. Smart pagination можно полностью отключить через `converter.pptx.smart-pagination-enabled=false`.
 
-M2 остаётся image-only: native/editable objects, локализованный fallback, margins/footer/numbering, API `mode` и публичная выдача PageModel **не реализованы** и относятся к следующим milestones.
+## Editable text and images (M3)
+
+При `converter.pptx.editable-enabled=true` deterministic planner классифицирует уже paginated PageModel в CSS pixels. Простые text runs становятся XSLF text boxes с font family/size/weight/style/color, alignment, line spacing и clickable links; безопасные embedded raster data assets становятся native pictures с сохранением aspect ratio и CSS position; простые backgrounds становятся shapes. LIST/TABLE (M4 scope), SVG/Canvas/chart, clipping, transforms, overlap groups, unsupported colors/styles и external/non-raster images получают localized crops из того же bounded full-page screenshot. Crop подавляет native content под теми же pixels, поэтому mixed slide не теряет и не дублирует область.
+
+Один uniform CSS-px-to-point mapper используется для всех native и fallback shapes. Asset count/decoded bytes/dimensions, shapes per slide, total localized crop pixels, screenshot bytes, slides и final ZIP проверяются до соответствующих дорогих allocations. `converter.pptx.editable-enabled=false` сохраняет M2 DOM-aware full-width screenshot output; extraction/planner failure по-прежнему использует fixed-height legacy path, если он разрешён.
 
 ## Lifecycle и health
 
@@ -161,7 +167,7 @@ Problem JSON содержит `status`, стабильный `code`, безоп�
 
 ## Известные ограничения
 
-- PPTX состоит из DOM-aware full-width raster slices и не содержит редактируемых DOM objects; при model/planner failure доступен legacy fixed-height fallback.
+- M3 native rendering намеренно консервативен: lists/tables, SVG/Canvas/chart, transforms, clipping, overlaps, unsupported CSS и non-embedded images остаются localized raster fallback; M4/M5 расширят native coverage.
 - Asset references содержат metadata/URI и bounded estimate для embedded data URI; M1 не загружает и не декодирует assets и не экспортирует Canvas/SVG payload.
 - Application URL checks и DevTools interception — defense in depth, не network boundary.
 - Process-tree supervisor рассчитан на дочерние процессы того же OS user и требует разрешения среды на `ProcessHandle.destroy/destroyForcibly`; deployment-level PID/cgroup supervision остаётся дополнительным рубежом.

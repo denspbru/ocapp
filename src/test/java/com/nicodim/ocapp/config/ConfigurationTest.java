@@ -16,11 +16,13 @@ class ConfigurationTest {
         assertThat(root.getLimits()).isNotNull();
         assertThat(root.getPdf()).isNotNull();
         assertThat(root.getPptx()).isNotNull();
+        assertThat(root.getPageModel()).isNotNull();
         exerciseBean(root.getBrowser());
         exerciseBean(root.getSecurity());
         exerciseBean(root.getLimits());
         exerciseBean(root.getPdf());
         exerciseBean(root.getPptx());
+        exerciseBean(root.getPageModel());
     }
 
     @Test void rejectsZeroOperationalTimeouts() {
