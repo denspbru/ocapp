@@ -210,7 +210,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M3 — редактируемые text и images
 
-- **Status:** done on feature branch; unreleased — structural, real-browser mixed and LibreOffice-rendered regression checks passed
+- **Status:** released in `v0.3.0` — structural, real-browser mixed and LibreOffice-rendered regression checks passed
 - **Target version:** `0.3`
 - **Issue:** [#13 — editable text and images](https://github.com/denspbru/ocapp/issues/13)
 - **Dependencies:** M1, M2.
@@ -224,7 +224,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M4 — редактируемые lists и tables
 
-- **Status:** done on feature branch; unreleased — unit/POI reopen and opt-in real-browser/LibreOffice gates
+- **Status:** released in `v0.3.0` — unit/POI reopen and real-browser/LibreOffice gates passed
 - **Target version:** `0.3`
 - **Issue:** [#14 — editable lists and paginated tables](https://github.com/denspbru/ocapp/issues/14)
 - **Dependencies:** M3; pagination contract M2.
@@ -238,7 +238,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M5 — SVG, Canvas и ECharts
 
-- **Status:** done on feature branch; unreleased — unit/POI reopen and opt-in real-browser/LibreOffice gates
+- **Status:** released in `v0.3.0` — unit/POI reopen and real-browser/LibreOffice gates passed
 - **Target version:** `0.3.x`
 - **Issue:** [#15 — SVG, Canvas and ECharts export](https://github.com/denspbru/ocapp/issues/15)
 - **Dependencies:** M1; readiness strategy из [#9](https://github.com/denspbru/ocapp/issues/9); localized fallback из M3.
@@ -252,7 +252,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M6 — authoring hints `data-pptx-*`
 
-- **Status:** completed on feature branch (2026-10-05; not released)
+- **Status:** released in `v0.3.0` (2026-10-05)
 - **Target version:** `0.3.x`
 - **Issue:** [#16 — data-pptx authoring hints](https://github.com/denspbru/ocapp/issues/16)
 - **Dependencies:** M1, M2; для `render="native"` — M3/M4/M5 по типу блока.
@@ -312,8 +312,8 @@ Visual и editable modes полностью локальны и детермин
 |---|---|---|
 | `0.1.x` | M0 hardening и общий backlog [#2](https://github.com/denspbru/ocapp/issues/2), [#6](https://github.com/denspbru/ocapp/issues/6), [#7](https://github.com/denspbru/ocapp/issues/7) | Безопасная bounded browser foundation и реальный Chromium smoke |
 | `0.2` | M1 PageModel + M2 smart screenshot pagination | DOM-aware visual PPTX при сохранённом legacy fallback |
-| `0.3` | M3 editable text/images + M4 lists/tables | Основной документный контент редактируем, сложные области локально rasterized |
-| `0.3.x` | M5 charts/media + M6 hints + M7 templates + M8 validation | Управляемый branded hybrid renderer с quality gates |
+| `0.3.0` | M3 editable text/images + M4 lists/tables + M5 charts/media + M6 hints | Редактируемый hybrid renderer с bounded localized fallback и versioned authoring hints |
+| `0.3.x` | M7 templates + M8 validation | Управляемый branded hybrid renderer с расширенными quality gates |
 | `0.4` | M9 semantic mode | Deterministic summary и только opt-in external AI adapter |
 | `1.0` | Production-ready consolidation | Стабильный контракт, эксплуатационные SLO/limits, compatibility и полная release validation |
 
