@@ -79,3 +79,8 @@ Default Surefire suite не использует внешнюю сеть/browser
 JaCoCo bundle gates: instruction/line ≥90%, branch ≥70%, method/class =100%.
 
 Process supervisor управляет только дочерними процессами того же OS user; container PID/cgroup policy остаётся рекомендуемым deployment boundary на случай запрета host-ом `ProcessHandle.destroy/destroyForcibly`.
+
+
+## M5 graphics export configuration
+
+Inline SVG is accepted only through a fail-closed element/attribute allowlist; active elements, event handlers, CSS/style and URL/external references are rejected to localized screenshots. Canvas is exported locally as PNG, and ECharts as configured `png`/`svg`; no page data is sent to an external conversion service. Defaults: scale `2.0` (range `1.0..4.0`), background `transparent` or hex color, format `png`, `16,000,000` pixels and `8,388,608` decoded bytes per graphic. Pixel checks precede temporary Canvas/ECharts allocations; encoded length is checked before Java decode and POI embedding.

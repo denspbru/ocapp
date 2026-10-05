@@ -33,6 +33,20 @@ class ConfigurationTest {
         }
     }
 
+    @Test void validatesBoundedGraphicsExportConfiguration() {
+        ConverterProperties properties = new ConverterProperties();
+        try (var factory = Validation.buildDefaultValidatorFactory()) {
+            var validator = factory.getValidator();
+            assertThat(validator.validate(properties)).isEmpty();
+            properties.getPptx().setGraphicsExportScale(4.01);
+            properties.getPptx().setGraphicsExportBackground("red");
+            properties.getPptx().setGraphicsExportFormat("webp");
+            properties.getPptx().setMaxGraphicsExportPixels(0);
+            properties.getPptx().setMaxGraphicsExportBytes(1023);
+            assertThat(validator.validate(properties)).hasSize(5);
+        }
+    }
+
     @Test void createsNamedFixedSizeExecutor() throws Exception {
         ConverterProperties properties = new ConverterProperties(); properties.getLimits().setMaxConcurrent(1);
         ExecutorService executor = new ExecutionConfiguration().conversionExecutor(properties);

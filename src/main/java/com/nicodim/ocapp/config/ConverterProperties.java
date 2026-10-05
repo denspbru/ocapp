@@ -5,6 +5,8 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.Pattern;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -154,6 +156,11 @@ public class ConverterProperties {
         @Min(1) @Max(100) private int maxNativeTableColumns = 12;
         @DecimalMin("1.0") private double minNativeTableColumnPoints = 18;
         @DecimalMin("1.0") private double minSliceHeightPixels = 120;
+        @DecimalMin("1.0") @DecimalMax("4.0") private double graphicsExportScale = 2.0;
+        @Pattern(regexp = "transparent|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}") private String graphicsExportBackground = "transparent";
+        @Pattern(regexp = "png|svg") private String graphicsExportFormat = "png";
+        @Min(1) private long maxGraphicsExportPixels = 16_000_000L;
+        @Min(1024) private long maxGraphicsExportBytes = 8L * 1024 * 1024;
         public double getSlideWidthInches() { return slideWidthInches; } public void setSlideWidthInches(double v) { slideWidthInches = v; }
         public double getSlideHeightInches() { return slideHeightInches; } public void setSlideHeightInches(double v) { slideHeightInches = v; }
         public int getMaxSlides() { return maxSlides; } public void setMaxSlides(int v) { maxSlides = v; }
@@ -165,5 +172,10 @@ public class ConverterProperties {
         public int getMaxNativeTableColumns() { return maxNativeTableColumns; } public void setMaxNativeTableColumns(int v) { maxNativeTableColumns = v; }
         public double getMinNativeTableColumnPoints() { return minNativeTableColumnPoints; } public void setMinNativeTableColumnPoints(double v) { minNativeTableColumnPoints = v; }
         public double getMinSliceHeightPixels() { return minSliceHeightPixels; } public void setMinSliceHeightPixels(double v) { minSliceHeightPixels = v; }
+        public double getGraphicsExportScale() { return graphicsExportScale; } public void setGraphicsExportScale(double v) { graphicsExportScale = v; }
+        public String getGraphicsExportBackground() { return graphicsExportBackground; } public void setGraphicsExportBackground(String v) { graphicsExportBackground = v; }
+        public String getGraphicsExportFormat() { return graphicsExportFormat; } public void setGraphicsExportFormat(String v) { graphicsExportFormat = v; }
+        public long getMaxGraphicsExportPixels() { return maxGraphicsExportPixels; } public void setMaxGraphicsExportPixels(long v) { maxGraphicsExportPixels = v; }
+        public long getMaxGraphicsExportBytes() { return maxGraphicsExportBytes; } public void setMaxGraphicsExportBytes(long v) { maxGraphicsExportBytes = v; }
     }
 }

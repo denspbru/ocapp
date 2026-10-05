@@ -310,7 +310,7 @@ public class ChromePageRenderer implements PageRenderer {
     }
 
     PageModel extractPageModel(ChromeDriver driver) {
-        return new DomPageExtractor(properties.getPageModel()).extract(driver, URI.create(driver.getCurrentUrl()));
+        return new DomPageExtractor(properties.getPageModel(), properties.getPptx()).extract(driver, URI.create(driver.getCurrentUrl()));
     }
 
     PaginationPlan planPageModel(PageModel model) {

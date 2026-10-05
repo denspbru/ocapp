@@ -1,6 +1,6 @@
 # Roadmap интеллектуальной PPTX-конвертации
 
-Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-04.
+Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-05.
 
 ## 1. Цель и границы
 
@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код завершённой M3 editable text/images реализации на feature branch. Компоненты M4+ из последующих разделов ещё не являются текущим контрактом.
+Ниже описан код завершённой M5 feature-ветки (M3–M5 ещё не выпущены). Последующие M6+ разделы остаются целевой архитектурой.
 
 ### HTTP и orchestration
 
@@ -58,9 +58,9 @@ Chromium остаётся источником истины для вычисл�
 - [`DomPageExtractor`](../src/main/java/com/nicodim/ocapp/pagemodel/DomPageExtractor.java) строит и валидирует bounded `PageModel`; [`SmartPaginationPlanner`](../src/main/java/com/nicodim/ocapp/pagination/SmartPaginationPlanner.java) выдаёт renderer-independent exact-coverage `PaginationPlan`.
 - Break priority: explicit slide hint, whitespace, block boundary, deterministic fallback. Planner защищает помещающиеся text/image/table/chart, `keepTogether`, transformed/overlapping blocks и heading с последующим content; oversized blocks получают стабильный warning.
 - [`ChromePageRenderer.capturePptx(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) получает один bounded full-page PNG через CDP. При `editable-enabled=true` validated PageModel и PaginationPlan передаются deterministic M3 planner/POI renderer-у; при `false` сохраняются M2 full-width visual slices.
-- M3 создаёт native XSLF text boxes (runs, font/style/color, alignment, line spacing, safe hyperlinks), native embedded raster pictures с aspect-preserving fit и простые background shapes. LIST/TABLE, SVG/Canvas/chart, transforms, clipping, overlap groups, unsupported styles/assets и split native candidates получают localized screenshot crops без двойной отрисовки.
+- M3–M5 создают native XSLF text boxes/images/lists/tables и simple backgrounds. Совместимый inline SVG проходит fail-closed allowlist и встраивается как SVG picture; Canvas локально экспортируется в PNG, ECharts — в bounded PNG/SVG. Unsafe/unsupported graphics, tainted Canvas, missing/failed ECharts, transforms/clipping/overlap получают localized screenshot crop без двойной отрисовки.
 - Smart pagination включена по умолчанию. Extraction/planner error может перейти в legacy fixed-height slicing; `PPTX_MAX_SLIDES_EXCEEDED` не fallback-ится и возникает до screenshot/POI. Margins/footer/numbering и public mode contract ещё не реализованы.
-- [`ChromePageRenderer.validateArtifact(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) для PPTX проверяет ZIP-сигнатуру. M3 mixed fixture дополнительно проходит opt-in LibreOffice/PDFBox external-office regression; полная fixture matrix, thresholds и baseline governance остаются M8.
+- [`ChromePageRenderer.validateArtifact(...)`](../src/main/java/com/nicodim/ocapp/browser/ChromePageRenderer.java) для PPTX проверяет ZIP-сигнатуру. M3 mixed и M5 graphics fixtures дополнительно проходят opt-in LibreOffice/PDFBox external-office regression с сохраняемыми PPTX/PDF/PNG artifacts; полная fixture matrix, thresholds и baseline governance остаются M8.
 
 ### Безопасность, ресурсы и тесты
 
@@ -238,11 +238,11 @@ Visual и editable modes полностью локальны и детермин
 
 ### M5 — SVG, Canvas и ECharts
 
-- **Status:** planned
+- **Status:** done on feature branch; unreleased — unit/POI reopen and opt-in real-browser/LibreOffice gates
 - **Target version:** `0.3.x`
 - **Issue:** [#15 — SVG, Canvas and ECharts export](https://github.com/denspbru/ocapp/issues/15)
 - **Dependencies:** M1; readiness strategy из [#9](https://github.com/denspbru/ocapp/issues/9); localized fallback из M3.
-- **Deliverables:** sanitized SVG path; Canvas export adapter; ECharts detector/exporter; bounded scale/background options; block screenshot fallback.
+- **Deliverables:** dual-boundary fail-closed SVG allowlist (browser + Java); sanitized SVG OOXML picture path; locally exported Canvas PNG; ECharts PNG/SVG detector/exporter; bounded scale/background/format/pixel/byte options; stable content-free fallback warnings; localized block screenshot fallback. Apache POI can embed/reopen sanitized SVG but does not make its paths editable; Canvas is intentionally rasterized in Chromium before POI.
 - **Acceptance criteria:**
   - compatible SVG сохраняет aspect ratio/transparency и не содержит active/external content;
   - delayed Canvas/ECharts fixtures экспортируются без clipping после readiness;

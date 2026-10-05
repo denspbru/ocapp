@@ -24,6 +24,9 @@ public sealed interface RenderItem {
     /** A safe embedded raster image rendered as a native PPTX picture. */
     record NativeImage(Rect bounds, AssetReference asset) implements RenderItem { }
 
+    /** A sanitized SVG or locally exported Canvas/ECharts picture. */
+    record NativeGraphic(Rect bounds, AssetReference asset) implements RenderItem { }
+
     /** One editable native list item. */
     record NativeListItem(Rect bounds, boolean ordered, int start, int level, String marker,
                           String textAlign, double lineHeightPixels, List<TextSpan> spans) implements RenderItem {

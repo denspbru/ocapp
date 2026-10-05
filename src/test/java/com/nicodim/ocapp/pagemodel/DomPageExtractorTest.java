@@ -55,7 +55,12 @@ class DomPageExtractorTest {
         PageModel model=new DomPageExtractor(limits).extract(js,URI.create("https://example.test/")); assertThat(model.blocks()).hasSize(1);
         when(js.executeScript(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any(Object[].class))).thenThrow(new WebDriverException("page text must not escape"));
         assertCode(()->new DomPageExtractor(limits).extract(js,URI.create("https://example.test/")),"PAGEMODEL_EXTRACTION_FAILED");
-        assertThat(new DomPageExtractor(limits).limitMap()).containsEntry("blocks",5000).containsEntry("depth",64);
+        assertThat(new DomPageExtractor(limits).limitMap()).containsEntry("blocks",5000).containsEntry("depth",64)
+            .containsEntry("exportScale",2.0).containsEntry("exportBackground","transparent")
+            .containsEntry("exportFormat","png").containsEntry("exportPixels",16_000_000L)
+            .containsEntry("exportBytes",8L*1024*1024);
+        assertThat(DomPageExtractor.SCRIPT).contains("GRAPHICS_SVG_UNSAFE", "GRAPHICS_CANVAS_EXPORT_FAILED",
+            "GRAPHICS_ECHARTS_MISSING", "localized-fallback");
     }
 
     @Test void valueTypesNormalizeNullsAndProvideNeutralDefaults(){

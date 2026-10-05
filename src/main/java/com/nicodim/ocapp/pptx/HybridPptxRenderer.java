@@ -74,6 +74,7 @@ public final class HybridPptxRenderer {
             int slideHeight = (int) Math.round(ppt.getSlideHeightInches() * 72);
             show.setPageSize(new Dimension(slideWidth, slideHeight));
             Map<String, NativePicture> nativePictures = new HashMap<>();
+            Map<String, XSLFPictureData> nativeGraphics = new HashMap<>();
             long[] assetBytes = {0};
             for (int index = 0; index < plan.slices().size(); index++) {
                 SlideSlice slice = plan.slices().get(index);
@@ -87,6 +88,7 @@ public final class HybridPptxRenderer {
                         case RenderItem.NativeListItem list -> addList(slide, mapper, list);
                         case RenderItem.NativeTable table -> addTable(slide, mapper, table);
                         case RenderItem.NativeImage image -> addImage(show, slide, mapper, image, nativePictures, assetBytes);
+                        case RenderItem.NativeGraphic graphic -> addGraphic(show, slide, mapper, graphic, nativeGraphics, assetBytes);
                     }
                 }
             }
@@ -275,6 +277,25 @@ public final class HybridPptxRenderer {
         slide.createPicture(picture.data()).setAnchor(fitted);
     }
 
+    private void addGraphic(XMLSlideShow show, XSLFSlide slide, CssCoordinateMapper mapper,
+                            RenderItem.NativeGraphic graphic, Map<String, XSLFPictureData> cache,
+                            long[] totalAssetBytes) throws IOException {
+        String key = graphic.asset().id() + "\n" + graphic.asset().uri();
+        XSLFPictureData data = cache.get(key);
+        if (data == null) {
+            if (cache.size() >= properties.getPageModel().getMaxAssets()) throw tooLarge("PPTX graphic count exceeds the configured limit");
+            byte[] bytes = decodeAsset(graphic.asset());
+            totalAssetBytes[0] = safeAdd(totalAssetBytes[0], bytes.length);
+            if (totalAssetBytes[0] > properties.getPageModel().getMaxAssetBytes())
+                throw tooLarge("PPTX assets exceed the configured byte limit");
+            if ("image/svg+xml".equalsIgnoreCase(graphic.asset().mediaType())) SafeSvg.validate(bytes);
+            else imageSize(bytes);
+            data = show.addPicture(bytes, pictureType(graphic.asset()));
+            cache.put(key, data);
+        }
+        slide.createPicture(data).setAnchor(mapper.map(graphic.bounds()));
+    }
+
     private byte[] decodeAsset(AssetReference asset) {
         String value = asset.uri().toString();
         int comma = value.indexOf(',');
@@ -282,7 +303,8 @@ public final class HybridPptxRenderer {
             throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PPTX_ASSET_INVALID", "Embedded image is not bounded base64 data");
         String encoded = value.substring(comma + 1);
         long upperBound = ((long) encoded.length() + 3) / 4 * 3;
-        long maximum = properties.getPageModel().getMaxAssetBytes();
+        long maximum = asset.kind() == AssetReference.Kind.IMAGE ? properties.getPageModel().getMaxAssetBytes()
+            : Math.min(properties.getPageModel().getMaxAssetBytes(), properties.getPptx().getMaxGraphicsExportBytes());
         if (upperBound > maximum + 2) throw tooLarge("Embedded image exceeds the configured byte limit");
         try {
             byte[] decoded = Base64.getDecoder().decode(encoded);
@@ -316,6 +338,7 @@ public final class HybridPptxRenderer {
             case "image/jpeg", "image/jpg" -> PictureData.PictureType.JPEG;
             case "image/gif" -> PictureData.PictureType.GIF;
             case "image/bmp" -> PictureData.PictureType.BMP;
+            case "image/svg+xml" -> PictureData.PictureType.SVG;
             default -> throw new IllegalArgumentException("Unsupported native image type");
         };
     }

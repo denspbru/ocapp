@@ -88,6 +88,8 @@ class RealBrowserE2EIT {
         fixture.createContext("/pagemodel", this::pageModelFixture);
         fixture.createContext("/tall-pptx", this::tallPptxFixture);
         fixture.createContext("/m3-mixed", this::m3MixedFixture);
+        fixture.createContext("/m5-graphics", this::m5GraphicsFixture);
+        fixture.createContext("/m5-pixel.png", this::m5Pixel);
         fixture.start();
         fixtureBase = "http://localhost:" + fixture.getAddress().getPort();
 
@@ -201,6 +203,51 @@ class RealBrowserE2EIT {
         }
     }
 
+    @Test void exportsSafeSvgDelayedCanvasAndEchartsWhileLocalizingUnsafeAndTaintedGraphics() throws Exception {
+        BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
+        ConverterProperties properties = application.getBean(ConverterProperties.class);
+        URI source = URI.create(fixtureBase + "/m5-graphics");
+        try (BrowserSession session = browserFactory.open()) {
+            session.driver().get(source.toASCIIString());
+            for (int i = 0; i < 40 && !Boolean.TRUE.equals(session.driver().executeScript("return !!document.querySelector('#render-ready')")); i++)
+                Thread.sleep(100);
+            PageModel model = new DomPageExtractor(properties.getPageModel(), properties.getPptx()).extract(session.driver(), source);
+            assertThat(model.assets()).anySatisfy(a -> {
+                assertThat(a.kind()).isEqualTo(com.nicodim.ocapp.pagemodel.AssetReference.Kind.SVG);
+                assertThat(a.embedded()).isTrue(); assertThat(a.mediaType()).isEqualTo("image/svg+xml");
+            });
+            assertThat(model.assets()).anySatisfy(a -> {
+                assertThat(a.kind()).isEqualTo(com.nicodim.ocapp.pagemodel.AssetReference.Kind.CANVAS);
+                assertThat(a.embedded()).isTrue(); assertThat(a.mediaType()).isEqualTo("image/png");
+            });
+            assertThat(model.assets()).anySatisfy(a -> {
+                assertThat(a.kind()).isEqualTo(com.nicodim.ocapp.pagemodel.AssetReference.Kind.CHART);
+                assertThat(a.embedded()).isTrue(); assertThat(a.mediaType()).isEqualTo("image/png");
+            });
+            ConverterProperties.Pptx svgOptions = new ConverterProperties.Pptx();
+            svgOptions.setGraphicsExportFormat("svg");
+            PageModel svgChartModel = new DomPageExtractor(properties.getPageModel(), svgOptions).extract(session.driver(), source);
+            assertThat(svgChartModel.assets()).anySatisfy(a -> {
+                assertThat(a.kind()).isEqualTo(com.nicodim.ocapp.pagemodel.AssetReference.Kind.CHART);
+                assertThat(a.embedded()).isTrue(); assertThat(a.mediaType()).isEqualTo("image/svg+xml");
+            });
+            assertThat(model.warnings()).extracting(com.nicodim.ocapp.pagemodel.ModelWarning::code)
+                .contains("GRAPHICS_SVG_UNSUPPORTED", "GRAPHICS_CANVAS_EXPORT_FAILED", "GRAPHICS_ECHARTS_MISSING");
+        }
+        Response response = post("/MakePPTX", source.toString());
+        assertThat(response.status()).withFailMessage("PPTX response: %s", new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(response.body()))) {
+            assertThat(show.getSlides()).hasSize(1);
+            assertThat(show.getPictureData()).extracting(org.apache.poi.sl.usermodel.PictureData::getType)
+                .contains(org.apache.poi.sl.usermodel.PictureData.PictureType.SVG, org.apache.poi.sl.usermodel.PictureData.PictureType.PNG);
+            assertThat(show.getSlides().getFirst().getShapes()).filteredOn(XSLFPictureShape.class::isInstance).hasSizeGreaterThanOrEqualTo(6);
+            assertThat(show.getSlides().getFirst().getShapes()).allSatisfy(shape -> {
+                assertThat(shape.getAnchor().getWidth()).isPositive(); assertThat(shape.getAnchor().getHeight()).isPositive();
+                assertThat(shape.getAnchor().getMaxX()).isLessThanOrEqualTo(show.getPageSize().getWidth() + .01);
+            });
+        }
+    }
+
     @Test void rendersMixedM4DeckThroughConfiguredLibreOffice() throws Exception {
         String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
         assumeTrue(!executable.isBlank(), "External-office smoke is opt-in; set -Docapp.e2e.libreoffice=/path/to/soffice");
@@ -245,6 +292,56 @@ class RealBrowserE2EIT {
                 assertThat(image.getWidth()).isBetween(1000, 4000); assertThat(image.getHeight()).isBetween(500, 3000);
                 assertRenderedColor(image, anchors.nativeImage(), 960, 540, color -> color.getRed() > 150 && color.getBlue() > 120 && color.getGreen() < 100, "native magenta image");
                 assertRenderedColor(image, anchors.fallback(), 960, 540, color -> color.getBlue() > 140 && color.getBlue() > color.getRed() + 50, "localized blue canvas fallback");
+                assertThat(ImageIO.write(image, "png", rendered.toFile())).isTrue();
+            }
+        } finally {
+            deleteTree(officeProfile);
+            if (!retainArtifacts) deleteTree(work);
+        }
+    }
+
+    @Test void rendersM5GraphicsDeckThroughConfiguredLibreOffice() throws Exception {
+        String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
+        assumeTrue(!executable.isBlank(), "External-office smoke is opt-in; set -Docapp.e2e.libreoffice=/path/to/soffice");
+        Path soffice = Path.of(executable).toAbsolutePath().normalize();
+        assertThat(soffice).isExecutable();
+        String artifactSetting = configured("ocapp.e2e.artifactsDir", "OCAPP_E2E_ARTIFACTS_DIR");
+        boolean retainArtifacts = !artifactSetting.isBlank();
+        Path work = retainArtifacts ? Path.of(artifactSetting).toAbsolutePath().normalize() : Files.createTempDirectory("ocapp-m5-office-e2e-");
+        Files.createDirectories(work);
+        Path officeProfile = work.resolve("libreoffice-m5-profile");
+        Path deck = work.resolve("m5-graphics.pptx"), pdf = work.resolve("m5-graphics.pdf");
+        Path rendered = work.resolve("m5-graphics-page-1.png"), log = work.resolve("m5-libreoffice.log");
+        try {
+            Response response = post("/MakePPTX", fixtureBase + "/m5-graphics");
+            assertThat(response.status()).withFailMessage("PPTX response: %s", new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
+            Files.write(deck, response.body());
+            try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(response.body()))) {
+                assertThat(show.getSlides()).hasSize(1);
+                assertThat(show.getPictureData()).extracting(org.apache.poi.sl.usermodel.PictureData::getType)
+                    .contains(org.apache.poi.sl.usermodel.PictureData.PictureType.SVG, org.apache.poi.sl.usermodel.PictureData.PictureType.PNG);
+            }
+
+            Process process = new ProcessBuilder(soffice.toString(), "--headless", "--nologo", "--nodefault", "--nolockcheck",
+                "--norestore", "-env:UserInstallation=" + officeProfile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
+                "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            boolean completed = process.waitFor(45, TimeUnit.SECONDS);
+            if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
+            assertThat(completed).withFailMessage("LibreOffice M5 conversion timed out; log=%s", log).isTrue();
+            assertThat(process.exitValue()).withFailMessage("LibreOffice M5 exit; log=%s%n%s", log, Files.readString(log)).isZero();
+            assertThat(pdf).isRegularFile();
+            assertThat(Files.size(pdf)).isBetween(1L, 50L * 1024 * 1024);
+
+            try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+                assertThat(document.getNumberOfPages()).isEqualTo(1);
+                BufferedImage image = new PDFRenderer(document).renderImageWithDPI(0, 144);
+                assertThat(image.getWidth()).isBetween(1000, 4000); assertThat(image.getHeight()).isBetween(500, 3000);
+                assertThat(containsRenderedColor(image, c -> c.getRed() > 200 && c.getGreen() < 190 && c.getBlue() < 190))
+                    .as("sanitized translucent red SVG is visible").isTrue();
+                assertThat(containsRenderedColor(image, c -> c.getBlue() > 150 && c.getBlue() > c.getRed() + 50))
+                    .as("delayed blue Canvas is visible").isTrue();
+                assertThat(containsRenderedColor(image, c -> c.getGreen() > 120 && c.getGreen() > c.getRed() + 30))
+                    .as("delayed green ECharts export is visible").isTrue();
                 assertThat(ImageIO.write(image, "png", rendered.toFile())).isTrue();
             }
         } finally {
@@ -382,6 +479,43 @@ class RealBrowserE2EIT {
             """);
     }
 
+    private void m5GraphicsFixture(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        String crossOriginPixel = "http://127.0.0.1:" + fixture.getAddress().getPort() + "/m5-pixel.png";
+        sendHtml(exchange, ("""
+            <!doctype html><html><head><style>
+            html,body{margin:0;width:960px;height:700px;background:white}.graphic,#safe,#unsafe{position:absolute;width:160px;height:120px}
+            #safe{left:20px;top:20px}#unsafe{left:210px;top:20px}#delayed{left:400px;top:20px}
+            #tainted{left:590px;top:20px}#echarts-ok{left:20px;top:190px}#echarts-fail{left:210px;top:190px;background:#f90}
+            </style></head><body>
+            <svg id='safe' viewBox='0 0 160 120' preserveAspectRatio='xMidYMid meet'><rect width='160' height='120' fill='#e33' fill-opacity='.6'/></svg>
+            <svg id='unsafe' viewBox='0 0 160 120'><script>window.__unsafeSvgExecuted=true</script><rect width='160' height='120' fill='#936'/></svg>
+            <canvas id='delayed' class='graphic' width='160' height='120'></canvas>
+            <canvas id='tainted' class='graphic' width='160' height='120'></canvas>
+            <div id='echarts-ok' class='graphic chart' data-pptx-chart><canvas width='160' height='120'></canvas></div>
+            <div id='echarts-fail' class='graphic chart' data-pptx-chart></div>
+            <script>
+            const tainted=document.querySelector('#tainted'),image=new Image();
+            const taintedReady=new Promise(resolve=>{image.onload=()=>{tainted.getContext('2d').drawImage(image,0,0);resolve()};image.onerror=resolve});image.src='%s';
+            setTimeout(async()=>{const c=document.querySelector('#delayed'),x=c.getContext('2d');x.fillStyle='#245cdb';x.fillRect(0,0,160,120);
+              const host=document.querySelector('#echarts-ok'),chart=host.querySelector('canvas'),cx=chart.getContext('2d');cx.fillStyle='#18a878';cx.fillRect(0,0,160,120);
+              window.echarts={getInstanceByDom:n=>n===host?{getDataURL:opts=>opts.type==='svg'
+                ?'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120"><rect width="160" height="120" fill="#18a878"/></svg>')
+                :chart.toDataURL('image/png')}:null};
+              await taintedReady;const marker=document.createElement('div');marker.id='render-ready';marker.textContent='ready';document.body.appendChild(marker)},350);
+            </script></body></html>
+            """).formatted(crossOriginPixel));
+    }
+
+    private void m5Pixel(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+        var graphics = image.createGraphics(); graphics.setColor(new java.awt.Color(110, 40, 180)); graphics.fillRect(0, 0, 2, 2); graphics.dispose();
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(); ImageIO.write(image, "png", bytes);
+        exchange.getResponseHeaders().set("Content-Type", "image/png"); exchange.sendResponseHeaders(200, bytes.size());
+        exchange.getResponseBody().write(bytes.toByteArray()); exchange.close();
+    }
+
     private void blocked(HttpExchange exchange) throws IOException {
         if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
         sendHtml(exchange, "<!doctype html><html><body><div id='render-ready'>ready</div><img src='http://169.254.169.254/latest/meta-data/'></body></html>");
@@ -490,6 +624,12 @@ class RealBrowserE2EIT {
                 return simple.getFillColor();
         }
         throw new AssertionError("No shape covers slide center");
+    }
+
+    private static boolean containsRenderedColor(BufferedImage image, java.util.function.Predicate<java.awt.Color> predicate) {
+        for (int y = 0; y < image.getHeight(); y += 2) for (int x = 0; x < image.getWidth(); x += 2)
+            if (predicate.test(new java.awt.Color(image.getRGB(x, y), true))) return true;
+        return false;
     }
 
     private static boolean presentationContainsBlueCanvas(byte[] bytes) throws IOException {

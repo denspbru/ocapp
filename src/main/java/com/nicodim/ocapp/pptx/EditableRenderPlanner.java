@@ -29,8 +29,10 @@ import java.util.Set;
 public final class EditableRenderPlanner {
     private static final Set<String> NATIVE_RASTER_MEDIA =
         Set.of("image/png", "image/jpeg", "image/jpg", "image/gif", "image/bmp");
-    private static final Set<BlockType> LOCALIZED_FALLBACK_TYPES =
-        Set.of(BlockType.SVG, BlockType.CANVAS, BlockType.CHART, BlockType.FALLBACK);
+    private static final Set<String> NATIVE_GRAPHIC_MEDIA =
+        Set.of("image/svg+xml", "image/png", "image/jpeg", "image/jpg");
+    private static final Set<BlockType> GRAPHIC_TYPES = Set.of(BlockType.SVG, BlockType.CANVAS, BlockType.CHART);
+    private static final Set<BlockType> LOCALIZED_FALLBACK_TYPES = Set.of(BlockType.FALLBACK);
     private static final double EPSILON = 0.000_001;
 
     public List<RenderItem> plan(PageModel model, SlideSlice slice, int maxItemsPerSlide) {
@@ -48,10 +50,12 @@ public final class EditableRenderPlanner {
 
         Set<String> nativeCompositeRoots = new HashSet<>();
         for (PageBlock block : blocks) {
-            if ((block.type() == BlockType.LIST || block.type() == BlockType.TABLE)
+            boolean supportedComposite = (block.type() == BlockType.LIST || block.type() == BlockType.TABLE)
                 && !requiresLocalizedFallback(block, byId)
-                && !tablePolicyFallback(block, slice, maxNativeTableCells, maxNativeTableColumns, minNativeColumnPoints))
-                nativeCompositeRoots.add(block.id());
+                && !tablePolicyFallback(block, slice, maxNativeTableCells, maxNativeTableColumns, minNativeColumnPoints);
+            boolean supportedAtomicGraphic = GRAPHIC_TYPES.contains(block.type())
+                && !requiresLocalizedFallback(block, byId);
+            if (supportedComposite || supportedAtomicGraphic) nativeCompositeRoots.add(block.id());
         }
         List<RenderItem.Rect> fallback = new ArrayList<>();
         Set<String> fallbackRoots = new HashSet<>();
@@ -80,7 +84,8 @@ public final class EditableRenderPlanner {
             if (clipped == null || (!(nativeItem instanceof RenderItem.NativeBackground) && overlapsAny(clipped, fallback))) continue;
             nativeItems.add(withBounds(nativeItem, clipped));
             classified.add(block.id());
-            if (nativeItem instanceof RenderItem.NativeTable || nativeItem instanceof RenderItem.NativeListItem) nativeRoots.add(block.id());
+            if (nativeItem instanceof RenderItem.NativeTable || nativeItem instanceof RenderItem.NativeListItem
+                || nativeItem instanceof RenderItem.NativeGraphic) nativeRoots.add(block.id());
         }
 
         // Unsupported leaves and unsupported assets still need pixels. Containers with separately
@@ -115,6 +120,7 @@ public final class EditableRenderPlanner {
         if (style == null || !Double.isFinite(style.opacity()) || Math.abs(style.opacity() - 1) > EPSILON) return true;
         java.awt.Color background = CssColors.parse(style.backgroundColor());
         if (background == null || (background.getAlpha() != 0 && background.getAlpha() != 255)) return true;
+        if (GRAPHIC_TYPES.contains(block.type())) return nativeGraphicAsset(block) == null;
         if (block.type() == BlockType.TEXT) return !supportedText(block);
         if (block.type() == BlockType.LIST) return !supportedList(block);
         if (block.type() == BlockType.TABLE) return !supportedTableStyle(block);
@@ -155,6 +161,8 @@ public final class EditableRenderPlanner {
                 block.style().backgroundColor(), spans);
         }
         if (block.type() == BlockType.TABLE) return nativeTable(block, slice, maxCells, maxColumns, minColumnPoints);
+        AssetReference graphic = nativeGraphicAsset(block);
+        if (graphic != null) return new RenderItem.NativeGraphic(toRect(block.bounds()), graphic);
         if (block.type() == BlockType.CONTAINER) {
             java.awt.Color background = CssColors.parse(block.style().backgroundColor());
             if (background != null && background.getAlpha() == 255) {
@@ -238,6 +246,17 @@ public final class EditableRenderPlanner {
         return Set.of("http", "https", "mailto").contains(target.getScheme().toLowerCase(Locale.ROOT));
     }
 
+
+    private static AssetReference nativeGraphicAsset(PageBlock block) {
+        if (!GRAPHIC_TYPES.contains(block.type())) return null;
+        return block.assets().stream().filter(a -> a.kind().name().equals(block.type().name()) && a.embedded()
+            && a.uri() != null && "data".equalsIgnoreCase(a.uri().getScheme())
+            && a.uri().toString().substring(0, Math.min(a.uri().toString().length(), 256)).toLowerCase(Locale.ROOT).contains(";base64,")
+            && NATIVE_GRAPHIC_MEDIA.contains(a.mediaType().toLowerCase(Locale.ROOT))
+            && (block.type() != BlockType.SVG || "image/svg+xml".equalsIgnoreCase(a.mediaType())))
+            .findFirst().orElse(null);
+    }
+
     private static AssetReference nativeImageAsset(PageBlock block) {
         if (block.type() != BlockType.IMAGE) return null;
         return block.assets().stream().filter(a -> a.kind() == AssetReference.Kind.IMAGE && a.embedded()
@@ -312,6 +331,7 @@ public final class EditableRenderPlanner {
             case RenderItem.NativeText t -> new RenderItem.NativeText(bounds, t.textAlign(), t.lineHeightPixels(), t.backgroundColorCss(), t.spans());
             case RenderItem.NativeBackground background -> new RenderItem.NativeBackground(bounds, background.colorCss());
             case RenderItem.NativeImage i -> new RenderItem.NativeImage(bounds, i.asset());
+            case RenderItem.NativeGraphic g -> new RenderItem.NativeGraphic(bounds, g.asset());
             case RenderItem.NativeListItem l -> new RenderItem.NativeListItem(bounds, l.ordered(), l.start(), l.level(), l.marker(), l.textAlign(), l.lineHeightPixels(), l.spans());
             case RenderItem.NativeTable t -> new RenderItem.NativeTable(bounds, t.table(), t.rows());
             case RenderItem.ScreenshotCrop ignored -> new RenderItem.ScreenshotCrop(bounds);

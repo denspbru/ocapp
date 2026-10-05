@@ -1,6 +1,6 @@
 # OCApp
 
-OCApp — Java 21 REST-сервис, который загружает веб-страницу в отдельной сессии Chrome/Chromium и возвращает MHTML, PDF или image-based PPTX. Результаты на сервере не сохраняются.
+OCApp — Java 21 REST-сервис, который загружает веб-страницу в отдельной сессии Chrome/Chromium и возвращает MHTML, PDF или гибридный editable/fallback PPTX. Результаты на сервере не сохраняются.
 
 ## API
 
@@ -54,9 +54,9 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 # equivalent environment gate: OCAPP_E2E_FAIL_CLOSED=true
 ```
 
-Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, delayed Canvas marker, DOM-aware pagination трёхцветной tall-page fixture, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction на локальном complex-layout fixture и cleanup временных профилей.
+Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, safe/unsafe SVG, delayed Canvas, реально tainted cross-origin Canvas, delayed/missing ECharts, DOM-aware pagination, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction и cleanup временных профилей.
 
-Опциональный external-office gate использует явно заданный локальный LibreOffice, отдельный bounded profile и timeout; platform path не зашит в build. Он генерирует mixed M3 deck реальным Chromium pipeline, экспортирует его Impress в PDF, рендерит PDF через PDFBox и проверяет один slide/page, отсутствие потери/дублирования marker text, clickable URI, native image и localized Canvas fallback в ожидаемых anchors:
+Опциональный external-office gate использует явно заданный локальный LibreOffice, отдельные bounded profiles и timeout; platform path не зашит в build. Он генерирует mixed M3 и graphics M5 decks реальным Chromium pipeline, экспортирует их Impress в PDF и рендерит PDF через PDFBox. M3 проверяет один slide/page, отсутствие потери/дублирования marker text, clickable URI, native image и localized Canvas fallback; M5 проверяет POI SVG+PNG picture types и видимые sanitized SVG, delayed Canvas и ECharts цвета. При заданном artifacts directory сохраняются исходные PPTX, PDF, PNG и LibreOffice logs:
 
 ```bash
 mvn -Preal-browser -Docapp.e2e.failClosed=true \
@@ -73,7 +73,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true \
 Встроенный default — `converter.security.egress-mode=PROXY` с пустым `proxy-url`, поэтому приложение **намеренно не запускается**, пока validating proxy не настроен:
 
 ```bash
-java -jar target/ocapp-0.2.1.jar \
+java -jar target/ocapp-0.3.0-SNAPSHOT.jar \
   --converter.security.proxy-url=http://proxy.internal:3128 \
   --converter.browser.binary=/usr/bin/chromium \
   --converter.browser.driver-path=/usr/bin/chromedriver
@@ -132,6 +132,11 @@ converter.security.allow-private-addresses=true
 | `converter.pptx.max-native-table-columns` | `12` | Максимум columns для native editable table |
 | `converter.pptx.min-native-table-column-points` | `18` | Минимальная средняя ширина native column после CSS→points mapping; более широкая/плотная table rasterizes locally |
 | `converter.pptx.min-slice-height-pixels` | `120` | Минимальная CSS-высота эвристического/explicit slice |
+| `converter.pptx.graphics-export-scale` | `2.0` (`1.0..4.0`) | Bounded scale для локального Canvas/ECharts export |
+| `converter.pptx.graphics-export-background` | `transparent` | `transparent` либо `#RRGGBB`/`#RRGGBBAA` для Canvas/ECharts |
+| `converter.pptx.graphics-export-format` | `png` | `png` или `svg` для ECharts `getDataURL`; Canvas остаётся PNG |
+| `converter.pptx.max-graphics-export-pixels` | `16000000` | Pixel budget до temporary Canvas/ECharts allocation |
+| `converter.pptx.max-graphics-export-bytes` | `8388608` | Per-graphic decoded-byte budget до Java decode/POI embedding |
 | `converter.page-model.max-blocks` / `max-depth` | `5000` / `64` | DOM model graph bounds до materialization |
 | `converter.page-model.max-text-length` / `max-table-cells` | `1000000` / `20000` | Общий text и table-cell budgets |
 | `converter.page-model.max-assets` / `max-asset-bytes` | `2000` / `52428800` | Asset references и оценка embedded bytes |
@@ -157,7 +162,7 @@ Chromium по-прежнему создаёт один full-page PNG в уже �
 
 ## Editable text and images (M3)
 
-При `converter.pptx.editable-enabled=true` deterministic planner классифицирует уже paginated PageModel в CSS pixels. Простые text runs становятся XSLF text boxes с font family/size/weight/style/color, alignment, line spacing и clickable links; ordered/unordered LI становятся native bullets/auto-numbering до nesting level 8; supported TABLE становится editable XSLFTable с proportional widths/heights, fills, borders, alignment и merges. Long tables select whole source rows deterministically and repeat contiguous leading TH rows. Tables over configured cell/column/minimum-width bounds, unsupported styles, or row-spans crossing pagination use a localized screenshot fallback. Безопасные embedded raster data assets становятся native pictures с сохранением aspect ratio и CSS position; простые backgrounds становятся shapes. SVG/Canvas/chart, clipping, transforms, overlap groups, unsupported colors/styles и external/non-raster images получают localized crops из того же bounded full-page screenshot. Crop подавляет native content под теми же pixels, поэтому mixed slide не теряет и не дублирует область.
+При `converter.pptx.editable-enabled=true` deterministic planner классифицирует уже paginated PageModel в CSS pixels. Простые text runs становятся XSLF text boxes с font family/size/weight/style/color, alignment, line spacing и clickable links; ordered/unordered LI становятся native bullets/auto-numbering до nesting level 8; supported TABLE становится editable XSLFTable с proportional widths/heights, fills, borders, alignment и merges. Long tables select whole source rows deterministically and repeat contiguous leading TH rows. Tables over configured cell/column/minimum-width bounds, unsupported styles, or row-spans crossing pagination use a localized screenshot fallback. Безопасные embedded raster data assets становятся native pictures с сохранением aspect ratio и CSS position; простые backgrounds становятся shapes. Совместимый inline SVG проходит fail-closed allowlist sanitization и сохраняется в OOXML как SVG picture; Canvas экспортируется локально в PNG после dimension/scale/pixel/byte checks; ECharts instance экспортируется локально через bounded `getDataURL` в PNG/SVG. Active/external/malformed/unsupported SVG, tainted Canvas, missing/failed ECharts, clipping, transforms, overlap groups и unsupported assets получают localized crops из того же bounded full-page screenshot. Crop подавляет native content под теми же pixels, поэтому mixed slide не теряет и не дублирует область.
 
 Один uniform CSS-px-to-point mapper используется для всех native и fallback shapes. Asset count/decoded bytes/dimensions, shapes per slide, total localized crop pixels, screenshot bytes, slides и final ZIP проверяются до соответствующих дорогих allocations. `converter.pptx.editable-enabled=false` сохраняет M2 DOM-aware full-width screenshot output; extraction/planner failure по-прежнему использует fixed-height legacy path, если он разрешён.
 
@@ -180,8 +185,8 @@ Problem JSON содержит `status`, стабильный `code`, безоп�
 
 ## Известные ограничения
 
-- M3 native rendering намеренно консервативен: lists/tables, SVG/Canvas/chart, transforms, clipping, overlaps, unsupported CSS и non-embedded images остаются localized raster fallback; M4/M5 расширят native coverage.
-- Asset references содержат metadata/URI и bounded estimate для embedded data URI; M1 не загружает и не декодирует assets и не экспортирует Canvas/SVG payload.
+- M5 graphics path намеренно консервативен: Apache POI сохраняет прошедший allowlist SVG как vector picture, но Canvas всегда имеет честную raster boundary в Chromium PNG export; unsupported SVG features (включая style/animation/foreignObject/external or URL refs), tainted Canvas и failed ECharts остаются localized raster fallback.
+- PowerPoint validation в этой ветке не заявлена. Обязательный structural reopen выполняет Apache POI; opt-in LibreOffice gate документирован ниже и сохраняет evidence artifacts, когда реально запущен.
 - Application URL checks и DevTools interception — defense in depth, не network boundary.
 - Process-tree supervisor рассчитан на дочерние процессы того же OS user и требует разрешения среды на `ProcessHandle.destroy/destroyForcibly`; deployment-level PID/cgroup supervision остаётся дополнительным рубежом.
 - MHTML CDP API возвращает Java `String`, поэтому его исходное Chrome/Selenium representation нельзя ограничить до получения; последующее UTF-8 копирование и HTTP output ограничены.
