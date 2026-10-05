@@ -1,6 +1,7 @@
 package com.nicodim.ocapp.pptx;
 
 import com.nicodim.ocapp.pagemodel.AssetReference;
+import com.nicodim.ocapp.pagemodel.AuthoringHints;
 import com.nicodim.ocapp.pagemodel.BlockType;
 import com.nicodim.ocapp.pagemodel.Bounds;
 import com.nicodim.ocapp.pagemodel.ComputedStyle;
@@ -42,6 +43,7 @@ public final class EditableRenderPlanner {
     public List<RenderItem> plan(PageModel model, SlideSlice slice, int maxItemsPerSlide,
                                  int maxNativeTableCells, int maxNativeTableColumns, double minNativeColumnPoints) {
         if (maxItemsPerSlide < 1) throw new IllegalArgumentException("maxItemsPerSlide must be positive");
+        double left = slice.source().x(), right = left + slice.source().width();
         double top = slice.source().y(), bottom = slice.source().bottom();
         List<PageBlock> blocks = model.blocks().stream().filter(b -> overlapsSlice(b, top, bottom))
             .sorted(Comparator.comparingInt(PageBlock::visualOrder).thenComparingInt(PageBlock::domOrder)).toList();
@@ -64,7 +66,7 @@ public final class EditableRenderPlanner {
             if (!requiresLocalizedFallback(block, byId) && !tablePolicyFallback(block, slice, maxNativeTableCells,
                 maxNativeTableColumns, minNativeColumnPoints)) continue;
             if (hasFallbackAncestor(block, byId, fallbackRoots)) continue;
-            RenderItem.Rect clipped = clippedBounds(block, top, bottom);
+            RenderItem.Rect clipped = clippedBounds(block, left, right, top, bottom);
             if (clipped != null) {
                 fallbackRoots.add(block.id());
                 addMerged(fallback, clipped);
@@ -79,8 +81,9 @@ public final class EditableRenderPlanner {
             RenderItem nativeItem = toNative(block, slice, maxNativeTableCells, maxNativeTableColumns, minNativeColumnPoints, byId);
             if (nativeItem == null) continue;
             boolean fragmentable = nativeItem instanceof RenderItem.NativeBackground || nativeItem instanceof RenderItem.NativeTable;
-            if (!fragmentable && (block.bounds().y() < top - EPSILON || block.bounds().bottom() > bottom + EPSILON)) continue;
-            RenderItem.Rect clipped = fragmentable ? clip(nativeItem.bounds(), top, bottom) : nativeItem.bounds();
+            if (!fragmentable && (block.bounds().x() < left - EPSILON || block.bounds().right() > right + EPSILON
+                || block.bounds().y() < top - EPSILON || block.bounds().bottom() > bottom + EPSILON)) continue;
+            RenderItem.Rect clipped = fragmentable ? clip(nativeItem.bounds(), left, right, top, bottom) : nativeItem.bounds();
             if (clipped == null || (!(nativeItem instanceof RenderItem.NativeBackground) && overlapsAny(clipped, fallback))) continue;
             nativeItems.add(withBounds(nativeItem, clipped));
             classified.add(block.id());
@@ -94,7 +97,7 @@ public final class EditableRenderPlanner {
             PageBlock block = blocks.get(i);
             if (classified.contains(block.id()) || hasCompositeAncestor(block, byId, nativeRoots)
                 || hasClassifiedDescendant(block, byId, classified)) continue;
-            RenderItem.Rect clipped = clippedBounds(block, top, bottom);
+            RenderItem.Rect clipped = clippedBounds(block, left, right, top, bottom);
             if (clipped == null || containedByAny(clipped, fallback)) continue;
             addMerged(fallback, clipped);
             classified.add(block.id());
@@ -114,7 +117,10 @@ public final class EditableRenderPlanner {
     }
 
     private static boolean requiresLocalizedFallback(PageBlock block, Map<String, PageBlock> byId) {
-        if (LOCALIZED_FALLBACK_TYPES.contains(block.type()) || block.transform().transformed()
+        // v1 precedence: an explicit image root rasterizes its bounded region and suppresses all
+        // descendants. NATIVE is a preference only; every representation safety check below wins.
+        if (block.hints().render() == AuthoringHints.Render.IMAGE
+            || LOCALIZED_FALLBACK_TYPES.contains(block.type()) || block.transform().transformed()
             || !block.overlapIds().isEmpty() || block.clipBounds() != null) return true;
         ComputedStyle style = block.style();
         if (style == null || !Double.isFinite(style.opacity()) || Math.abs(style.opacity() - 1) > EPSILON) return true;
@@ -301,9 +307,9 @@ public final class EditableRenderPlanner {
         return false;
     }
 
-    private static RenderItem.Rect clippedBounds(PageBlock block, double top, double bottom) {
+    private static RenderItem.Rect clippedBounds(PageBlock block, double left, double right, double top, double bottom) {
         Bounds bounds = block.clipBounds() == null ? block.bounds() : block.clipBounds();
-        return clip(toRect(bounds), top, bottom);
+        return clip(toRect(bounds), left, right, top, bottom);
     }
 
     private static void addMerged(List<RenderItem.Rect> values, RenderItem.Rect candidate) {
@@ -337,9 +343,10 @@ public final class EditableRenderPlanner {
             case RenderItem.ScreenshotCrop ignored -> new RenderItem.ScreenshotCrop(bounds);
         };
     }
-    private static RenderItem.Rect clip(RenderItem.Rect rect, double top, double bottom) {
-        double y = Math.max(rect.y(), top), end = Math.min(rect.bottom(), bottom);
-        return end <= y + EPSILON ? null : new RenderItem.Rect(rect.x(), y, rect.width(), end - y);
+    private static RenderItem.Rect clip(RenderItem.Rect rect, double left, double right, double top, double bottom) {
+        double x = Math.max(rect.x(), left), xEnd = Math.min(rect.right(), right);
+        double y = Math.max(rect.y(), top), yEnd = Math.min(rect.bottom(), bottom);
+        return xEnd <= x + EPSILON || yEnd <= y + EPSILON ? null : new RenderItem.Rect(x, y, xEnd - x, yEnd - y);
     }
     private static boolean overlapsAny(RenderItem.Rect rect, List<RenderItem.Rect> values) {
         return values.stream().anyMatch(rect::intersects);

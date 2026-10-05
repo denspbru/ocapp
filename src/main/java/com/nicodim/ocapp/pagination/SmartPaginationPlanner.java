@@ -72,7 +72,7 @@ public final class SmartPaginationPlanner {
         for (PageBlock block : blocks) {
             Bounds visible = block.clipBounds() == null ? block.bounds() : block.clipBounds();
             double top = clamp(visible.y(), 0, height), bottom = clamp(visible.bottom(), 0, height);
-            if (!block.hints().slide().isBlank() && top > 0) result.add(new Candidate(top, BreakRationale.EXPLICIT_HINT, 0));
+            if (block.hints().breakBefore() && top > 0) result.add(new Candidate(top, BreakRationale.EXPLICIT_HINT, 0));
             if (top > 0) result.add(new Candidate(top, BreakRationale.BLOCK_BOUNDARY, 2));
             if (bottom < height) result.add(new Candidate(bottom, BreakRationale.BLOCK_BOUNDARY, 2));
         }
@@ -86,14 +86,25 @@ public final class SmartPaginationPlanner {
 
     private static Choice choose(double start, double ideal, double height, double minimum,
                                  List<Candidate> candidates, List<PageBlock> blocks) {
-        if (ideal >= height - EPSILON || height - ideal < minimum - EPSILON)
-            return new Choice(height, BreakRationale.DOCUMENT_END, false);
+        if (ideal >= height - EPSILON) return new Choice(height, BreakRationale.DOCUMENT_END, false);
+        // Preserve the automatic single-slide remainder rule, but never let it erase a valid
+        // author-requested boundary that leaves two bounded minimum-size slices.
+        if (height - ideal < minimum - EPSILON) {
+            Candidate explicit = null;
+            for (Candidate candidate : candidates) if (candidate.priority() == 0
+                && candidate.position() >= start + minimum - EPSILON
+                && candidate.position() <= ideal + EPSILON
+                && height - candidate.position() >= minimum - EPSILON
+                && (explicit == null || candidate.position() > explicit.position())) explicit = candidate;
+            return explicit == null ? new Choice(height, BreakRationale.DOCUMENT_END, false)
+                : new Choice(explicit.position(), explicit.rationale(), false);
+        }
         for (int priority = 0; priority <= 2; priority++) {
             Candidate best = null;
             for (Candidate candidate : candidates) {
                 if (candidate.priority() != priority || candidate.position() < start + minimum - EPSILON
                     || candidate.position() > ideal + EPSILON || height - candidate.position() < minimum - EPSILON
-                    || splitsProtected(candidate.position(), blocks, ideal - start)) continue;
+                    || (priority != 0 && splitsProtected(candidate.position(), blocks, ideal - start))) continue;
                 if (best == null || candidate.position() > best.position()) best = candidate;
             }
             if (best != null) return new Choice(best.position(), best.rationale(), false);

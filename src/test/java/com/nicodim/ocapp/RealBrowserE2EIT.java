@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.nicodim.ocapp.browser.BrowserFactory;
 import com.nicodim.ocapp.browser.BrowserSession;
 import com.nicodim.ocapp.config.ConverterProperties;
+import com.nicodim.ocapp.pagemodel.AuthoringHints;
 import com.nicodim.ocapp.pagemodel.BlockType;
 import com.nicodim.ocapp.pagemodel.DomPageExtractor;
 import com.nicodim.ocapp.pagemodel.PageBlock;
@@ -89,6 +90,7 @@ class RealBrowserE2EIT {
         fixture.createContext("/tall-pptx", this::tallPptxFixture);
         fixture.createContext("/m3-mixed", this::m3MixedFixture);
         fixture.createContext("/m5-graphics", this::m5GraphicsFixture);
+        fixture.createContext("/m6-hints", this::m6HintsFixture);
         fixture.createContext("/m5-pixel.png", this::m5Pixel);
         fixture.start();
         fixtureBase = "http://localhost:" + fixture.getAddress().getPort();
@@ -245,6 +247,85 @@ class RealBrowserE2EIT {
                 assertThat(shape.getAnchor().getWidth()).isPositive(); assertThat(shape.getAnchor().getHeight()).isPositive();
                 assertThat(shape.getAnchor().getMaxX()).isLessThanOrEqualTo(show.getPageSize().getWidth() + .01);
             });
+        }
+    }
+
+    @Test void extractsAndRendersM6HintsThroughRealChromium() throws Exception {
+        BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
+        ConverterProperties properties = application.getBean(ConverterProperties.class);
+        URI source = URI.create(fixtureBase + "/m6-hints");
+        try (BrowserSession session = browserFactory.open()) {
+            session.driver().get(source.toASCIIString());
+            PageModel model = new DomPageExtractor(properties.getPageModel(), properties.getPptx()).extract(session.driver(), source);
+            assertThat(model.blocks()).noneMatch(block -> block.textRuns().stream()
+                .anyMatch(run -> run.text().contains("ignored secret")) || block.hints().title().equals("ignored title"));
+            assertThat(model.blocks()).anyMatch(block -> block.hints().breakBefore());
+            assertThat(model.blocks()).anyMatch(block -> block.hints().keepTogether());
+            assertThat(model.blocks()).anyMatch(block -> block.hints().render() == AuthoringHints.Render.IMAGE);
+            assertThat(model.blocks()).anyMatch(block -> block.hints().render() == AuthoringHints.Render.NATIVE);
+            assertThat(model.blocks()).anyMatch(block -> block.hints().title().equals("M6 first title")
+                && block.hints().notes().equals("M6 first note") && block.hints().layout().equals("title-only"));
+            assertThat(model.warnings()).extracting(com.nicodim.ocapp.pagemodel.ModelWarning::code)
+                .containsOnly("PPTX_HINT_INVALID");
+            assertThat(model.warnings()).extracting(com.nicodim.ocapp.pagemodel.ModelWarning::detail)
+                .contains("data-pptx-slide", "data-pptx-title", "data-pptx-ignore", "data-pptx-keep-together",
+                    "data-pptx-notes", "data-pptx-layout", "data-pptx-render")
+                .allSatisfy(detail -> assertThat(detail).doesNotContain("secret-value", "invalid hints"));
+            assertThat(model.warnings().stream().filter(warning -> warning.detail().equals("data-pptx-render")).count())
+                .isEqualTo(2);
+        }
+        Response response = post("/MakePPTX", source.toString());
+        assertThat(response.status()).withFailMessage("M6 PPTX response: %s", new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(response.body()))) {
+            assertThat(show.getSlides()).hasSize(2);
+            assertThat(show.getSlides()).extracting(org.apache.poi.xslf.usermodel.XSLFSlide::getTitle)
+                .containsExactly("M6 first title", "M6 second title");
+            assertThat(show.getSlides()).extracting(org.apache.poi.xslf.usermodel.XSLFSlide::getSlideName)
+                .containsExactly("ocapp-layout:title-only", "ocapp-layout:blank");
+            assertThat(show.getSlides().getFirst().getShapes()).anyMatch(XSLFPictureShape.class::isInstance);
+            assertThat(show.getSlides().getFirst().getShapes()).noneMatch(shape -> shape instanceof org.apache.poi.xslf.usermodel.XSLFTextShape text
+                && text.getText().contains("rasterized child"));
+            assertThat(show.getSlides().getFirst().getNotes().getTextParagraphs().stream().flatMap(List::stream)
+                .flatMap(paragraph -> paragraph.getTextRuns().stream()).map(run -> run.getRawText()).toList())
+                .contains("M6 first note");
+            assertThat(show.getProperties().getCustomProperties().getProperty("ocapp.authoring-hints.contract").getLpwstr()).isEqualTo("1");
+        }
+    }
+
+    @Test void rendersM6HintDeckThroughConfiguredLibreOffice() throws Exception {
+        String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
+        assumeTrue(!executable.isBlank(), "External-office smoke is opt-in; set -Docapp.e2e.libreoffice=/path/to/soffice");
+        Path soffice = Path.of(executable).toAbsolutePath().normalize();
+        assertThat(soffice).isExecutable();
+        String artifactSetting = configured("ocapp.e2e.artifactsDir", "OCAPP_E2E_ARTIFACTS_DIR");
+        boolean retainArtifacts = !artifactSetting.isBlank();
+        Path work = retainArtifacts ? Path.of(artifactSetting).toAbsolutePath().normalize() : Files.createTempDirectory("ocapp-m6-office-e2e-");
+        Files.createDirectories(work);
+        Path profile = work.resolve("libreoffice-m6-profile");
+        Path deck = work.resolve("m6-hints.pptx"), pdf = work.resolve("m6-hints.pdf"), log = work.resolve("m6-libreoffice.log");
+        try {
+            Response response = post("/MakePPTX", fixtureBase + "/m6-hints");
+            assertThat(response.status()).isEqualTo(200);
+            Files.write(deck, response.body());
+            Process process = new ProcessBuilder(soffice.toString(), "--headless", "--nologo", "--nodefault", "--nolockcheck",
+                "--norestore", "-env:UserInstallation=" + profile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
+                "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            boolean completed = process.waitFor(45, TimeUnit.SECONDS);
+            if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
+            assertThat(completed).withFailMessage("LibreOffice M6 conversion timed out; log=%s", log).isTrue();
+            assertThat(process.exitValue()).withFailMessage("LibreOffice M6 exit; log=%s%n%s", log, Files.readString(log)).isZero();
+            try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+                assertThat(document.getNumberOfPages()).isEqualTo(2);
+                String text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ");
+                assertThat(occurrences(text, "M6 first title")).isEqualTo(1);
+                assertThat(occurrences(text, "M6 second title")).isEqualTo(1);
+                BufferedImage first = new PDFRenderer(document).renderImageWithDPI(0, 144);
+                assertThat(containsRenderedColor(first, c -> c.getRed() > 150 && c.getGreen() < 100 && c.getBlue() < 100))
+                    .as("forced localized red image is visible").isTrue();
+            }
+        } finally {
+            deleteTree(profile);
+            if (!retainArtifacts) deleteTree(work);
         }
     }
 
@@ -450,8 +531,8 @@ class RealBrowserE2EIT {
             html,body{margin:0;width:100%;}section{height:700px;width:100%;}
             .red{background:rgb(220,40,40)}.green{background:rgb(40,180,60)}.blue{background:rgb(40,80,220)}
             </style></head><body><section class='red'></section>
-            <section class='green' data-pptx-slide='new'></section>
-            <section class='blue' data-pptx-slide='new'><div id='render-ready'>ready</div></section>
+            <section class='green' data-pptx-slide='break-before'></section>
+            <section class='blue' data-pptx-slide='break-before'><div id='render-ready'>ready</div></section>
             </body></html>
             """);
     }
@@ -476,6 +557,28 @@ class RealBrowserE2EIT {
             <canvas id='fallback' width='260' height='140'></canvas><script>
             const c=document.querySelector('#fallback'),x=c.getContext('2d');x.fillStyle='rgb(35,90,210)';x.fillRect(0,0,c.width,c.height);
             x.fillStyle='rgb(250,210,30)';x.fillRect(20,20,40,40);</script></body></html>
+            """);
+    }
+
+    private void m6HintsFixture(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        sendHtml(exchange, """
+            <!doctype html><html><head><style>
+            html,body{margin:0;width:960px;background:white;font-family:Arial,sans-serif}section{height:450px;position:relative}
+            .forced{background:rgb(210,45,45)}.native{background:rgb(45,155,75)}h2{margin:0;padding:100px;font-size:36px}.unsafe{transform:rotate(2deg)}
+            </style></head><body>
+            <section class='forced' data-pptx-title='M6 first title' data-pptx-notes='M6 first note'
+              data-pptx-layout='title-only' data-pptx-render='image' data-pptx-keep-together>
+              <h2>rasterized child</h2><p data-pptx-ignore data-pptx-title='ignored title' data-pptx-render='native'>ignored secret</p>
+            </section>
+            <section class='native' data-pptx-slide='break-before' data-pptx-title='M6 second title'
+              data-pptx-layout='blank' data-pptx-render='native'>
+              <h2 class='unsafe'>safe fallback under native preference</h2>
+              <i data-pptx-render='secret-value'>invalid value</i><em data-pptx-render='auto'>invalid automatic override</em>
+              <b data-pptx-slide='secret-value' data-pptx-title=' ' data-pptx-ignore='secret-value'
+                data-pptx-keep-together='secret-value' data-pptx-notes=' ' data-pptx-layout='secret-value'>invalid hints</b>
+              <div id='render-ready'>ready</div>
+            </section></body></html>
             """);
     }
 

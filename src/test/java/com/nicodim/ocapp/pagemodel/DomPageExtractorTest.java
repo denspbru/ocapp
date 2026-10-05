@@ -22,6 +22,13 @@ import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriverException;
 
 class DomPageExtractorTest {
+    @Test void extractionScriptImplementsEveryV1HintAndContentFreeValidation() {
+        assertThat(DomPageExtractor.SCRIPT).contains("data-pptx-slide", "data-pptx-title", "data-pptx-ignore",
+            "data-pptx-keep-together", "data-pptx-notes", "data-pptx-layout", "data-pptx-render",
+            "PPTX_HINT_INVALID", "break-before", "title-only");
+        assertThat(DomPageExtractor.SCRIPT).doesNotContain("warning('PPTX_HINT_INVALID',id,raw)");
+    }
+
     private ConverterProperties.PageModelLimits limits;
     @BeforeEach void setUp(){limits=new ConverterProperties().getPageModel();}
 
@@ -142,7 +149,7 @@ class DomPageExtractorTest {
     }
 
     @Test void safeDiagnosticRedactsEveryPageControlledStringClass(){
-        Map<String,Object> b=block("a","TEXT","",0,0);Map<String,Object>s=new LinkedHashMap<>(style());s.put("fontFamily","SECRET_STYLE");b.put("style",s);b.put("transform",Map.of("transformed",true,"matrix","SECRET_MATRIX","rotation",0d,"scaleX",1d,"scaleY",1d));b.put("hints",Map.of("keepTogether",false,"slide","SECRET_HINT","title","","notes","","layout","","render","AUTO"));b.put("textRuns",List.of(Map.of("text","SECRET_TEXT","style",style())));b.put("list",Map.of("ordered",false,"start",1,"level",0,"marker","SECRET_MARKER"));b.put("table",null);
+        Map<String,Object> b=block("a","TEXT","",0,0);Map<String,Object>s=new LinkedHashMap<>(style());s.put("fontFamily","SECRET_STYLE");b.put("style",s);b.put("transform",Map.of("transformed",true,"matrix","SECRET_MATRIX","rotation",0d,"scaleX",1d,"scaleY",1d));b.put("hints",Map.of("keepTogether",false,"slide","","title","SECRET_HINT","notes","","layout","","render","AUTO"));b.put("textRuns",List.of(Map.of("text","SECRET_TEXT","style",style())));b.put("list",Map.of("ordered",false,"start",1,"level",0,"marker","SECRET_MARKER"));b.put("table",null);
         Map<String,Object> r=result(List.of(b),List.of());r.put("document",Map.of("title","SECRET_TITLE","language","SECRET_LANG"));r.put("capture",Map.of("userAgent","SECRET_UA","locale","SECRET_LOCALE","timezone","SECRET_TZ","dpr",1d,"readiness","SECRET_READY","observations",List.of("SECRET_OBS")));r.put("warnings",List.of(Map.of("code","SAFE_CODE","blockId","a","detail","SECRET_WARNING")));
         String safe=PageModelDiagnostics.safeCanonicalJson(DomPageExtractor.fromScriptResult(r,URI.create("https://SECRET_USER:SECRET_PASS@example.test/path?q=SECRET_QUERY#frag"),limits));
         assertThat(safe).doesNotContain("SECRET_").doesNotContain("/path").doesNotContain("QUERY");

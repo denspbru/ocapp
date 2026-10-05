@@ -3,6 +3,7 @@ package com.nicodim.ocapp.pptx;
 import com.nicodim.ocapp.browser.BoundedByteArrayOutputStream;
 import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.pagemodel.AssetReference;
+import com.nicodim.ocapp.pagemodel.AuthoringHints;
 import com.nicodim.ocapp.pagemodel.PageModel;
 import com.nicodim.ocapp.pagemodel.TableSemantics;
 import com.nicodim.ocapp.pagination.PaginationPlan;
@@ -25,6 +26,7 @@ import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import org.apache.poi.sl.usermodel.AutoNumberingScheme;
 import org.apache.poi.sl.usermodel.PictureData;
+import org.apache.poi.sl.usermodel.Placeholder;
 import org.apache.poi.sl.usermodel.ShapeType;
 import org.apache.poi.sl.usermodel.TableCell.BorderEdge;
 import org.apache.poi.sl.usermodel.StrokeStyle;
@@ -32,6 +34,7 @@ import org.apache.poi.sl.usermodel.TextParagraph;
 import org.apache.poi.sl.usermodel.VerticalAlignment;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xslf.usermodel.XSLFHyperlink;
+import org.apache.poi.xslf.usermodel.XSLFNotes;
 import org.apache.poi.xslf.usermodel.XSLFPictureData;
 import org.apache.poi.xslf.usermodel.XSLFPictureShape;
 import org.apache.poi.xslf.usermodel.XSLFSlide;
@@ -52,12 +55,14 @@ public final class HybridPptxRenderer {
     public byte[] render(BufferedImage screenshot, PageModel model, PaginationPlan plan) {
         validateScreenshotMapping(screenshot, model, plan);
         int maxItems = properties.getPptx().getMaxItemsPerSlide();
+        AuthoringHintResolver.Resolution authoring = new AuthoringHintResolver().resolve(model, plan);
         List<List<RenderItem>> slideItems = new ArrayList<>(plan.slices().size());
         long cropPixels = 0;
         for (SlideSlice slice : plan.slices()) {
             List<RenderItem> items = planner.plan(model, slice, maxItems, properties.getPptx().getMaxNativeTableCells(),
                 properties.getPptx().getMaxNativeTableColumns(), properties.getPptx().getMinNativeTableColumnPoints());
-            if (items.size() > maxItems) throw tooLarge("PPTX shape count exceeds the configured limit");
+            int semanticShapes = authoring.slides().get(slice.index()).title().isEmpty() ? 0 : 1;
+            if (items.size() + semanticShapes > maxItems) throw tooLarge("PPTX shape count exceeds the configured limit");
             for (RenderItem item : items) if (item instanceof RenderItem.ScreenshotCrop crop) {
                 PixelRect pixels = pixelRect(crop.bounds(), screenshot, model);
                 cropPixels = safeAdd(cropPixels, (long) pixels.width() * pixels.height());
@@ -73,6 +78,22 @@ public final class HybridPptxRenderer {
             int slideWidth = (int) Math.round(ppt.getSlideWidthInches() * 72);
             int slideHeight = (int) Math.round(ppt.getSlideHeightInches() * 72);
             show.setPageSize(new Dimension(slideWidth, slideHeight));
+            var custom = show.getProperties().getCustomProperties();
+            boolean hasAuthoringHints = false;
+            for (var block : model.blocks()) if (block.hints().keepTogether() || block.hints().breakBefore()
+                || !block.hints().title().isEmpty() || !block.hints().notes().isEmpty()
+                || !block.hints().layout().isEmpty() || block.hints().render() != AuthoringHints.Render.AUTO) {
+                hasAuthoringHints = true; break;
+            }
+            if (!hasAuthoringHints) for (var warning : model.warnings()) if (warning.code().startsWith("PPTX_HINT_")) {
+                hasAuthoringHints = true; break;
+            }
+            if (hasAuthoringHints) custom.addProperty("ocapp.authoring-hints.contract", AuthoringHints.CONTRACT_VERSION);
+            int warningIndex = 0;
+            for (var warning : model.warnings()) if (warning.code().startsWith("PPTX_HINT_"))
+                custom.addProperty("ocapp.authoring-hints.warning." + warningIndex++, warning.code() + ":" + warning.detail());
+            for (var warning : authoring.warnings())
+                custom.addProperty("ocapp.authoring-hints.warning." + warningIndex++, warning.code() + ":" + warning.slideIndex() + ":" + warning.attribute());
             Map<String, NativePicture> nativePictures = new HashMap<>();
             Map<String, XSLFPictureData> nativeGraphics = new HashMap<>();
             long[] assetBytes = {0};
@@ -91,6 +112,8 @@ public final class HybridPptxRenderer {
                         case RenderItem.NativeGraphic graphic -> addGraphic(show, slide, mapper, graphic, nativeGraphics, assetBytes);
                     }
                 }
+                // Semantic title/notes are authored after visual content so an image fallback cannot obscure the title.
+                applySlideHints(show, slide, authoring.slides().get(index), slideWidth, slideHeight);
             }
             show.write(output);
             return output.toByteArray();
@@ -98,6 +121,23 @@ public final class HybridPptxRenderer {
         catch (IOException | IllegalArgumentException ex) {
             throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PPTX_CREATION_FAILED",
                 "Editable presentation could not be created", ex);
+        }
+    }
+
+    private static void applySlideHints(XMLSlideShow show, XSLFSlide slide,
+                                        AuthoringHintResolver.SlideHints hints, int width, int height) {
+        if (!hints.layout().isEmpty()) slide.getXmlObject().getCSld().setName("ocapp-layout:" + hints.layout());
+        if (!hints.title().isEmpty()) {
+            XSLFTextBox title = slide.createTextBox();
+            title.setPlaceholder(Placeholder.TITLE);
+            title.setAnchor(new Rectangle2D.Double(width * 0.05, height * 0.03, width * 0.90, height * 0.12));
+            title.setText(hints.title());
+        }
+        if (!hints.notes().isEmpty()) {
+            XSLFNotes notes = show.getNotesSlide(slide);
+            XSLFTextBox body = notes.createTextBox();
+            body.setPlaceholder(Placeholder.BODY);
+            body.setText(hints.notes());
         }
     }
 

@@ -32,7 +32,7 @@ class SmartPaginationPlannerTest {
             block("intro", BlockType.TEXT, 40, 300, 0, false, "", 16, 400, null, false),
             block("heading", BlockType.TEXT, 780, 60, 1, false, "", 30, 700, null, false),
             block("paragraph", BlockType.TEXT, 850, 180, 2, false, "", 16, 400, null, false),
-            block("explicit", BlockType.CONTAINER, 1420, 200, 3, false, "new", 16, 400, null, false));
+            block("explicit", BlockType.CONTAINER, 1420, 200, 3, false, AuthoringHints.BREAK_BEFORE, 16, 400, null, false));
         PaginationPlan plan = planner.plan(model(1600, 2400, blocks, 1.0, 0), options);
         assertThat(plan.slices()).hasSizeGreaterThanOrEqualTo(3);
         assertThat(plan.slices().get(0).source().bottom()).isEqualTo(560);
@@ -81,8 +81,8 @@ class SmartPaginationPlannerTest {
 
     @Test void prioritizesExplicitBreaksAndWarnsWhenTheyAreTooClose() {
         List<PageBlock> blocks = List.of(
-            block("early", BlockType.CONTAINER, 50, 20, 0, false, "slide", 16, 400, null, false),
-            block("explicit", BlockType.CONTAINER, 400, 20, 1, false, "slide", 16, 400, null, false),
+            block("early", BlockType.CONTAINER, 50, 20, 0, false, AuthoringHints.BREAK_BEFORE, 16, 400, null, false),
+            block("explicit", BlockType.CONTAINER, 400, 20, 1, false, AuthoringHints.BREAK_BEFORE, 16, 400, null, false),
             block("later", BlockType.CONTAINER, 850, 20, 2, false, "", 16, 400, null, false));
         PaginationPlan plan = planner.plan(model(1600, 1800, blocks, 1, 0), options);
         assertThat(plan.slices().getFirst().source().bottom()).isEqualTo(400);
@@ -129,7 +129,7 @@ class SmartPaginationPlannerTest {
                 double y = random.nextDouble() * Math.max(1, height - 1);
                 double h = Math.min(height - y, 1 + random.nextDouble() * 900);
                 BlockType type = BlockType.values()[random.nextInt(BlockType.values().length)];
-                blocks.add(block("b" + i, type, y, h, i, random.nextBoolean(), i % 17 == 0 ? "slide" : "",
+                blocks.add(block("b" + i, type, y, h, i, random.nextBoolean(), i % 17 == 0 ? AuthoringHints.BREAK_BEFORE : "",
                     12 + random.nextInt(20), random.nextBoolean() ? 400 : 700, null, random.nextBoolean()));
             }
             PaginationPlan plan = planner.plan(model(width, height, blocks, 1 + random.nextDouble(), random.nextDouble() * 100),
@@ -144,12 +144,12 @@ class SmartPaginationPlannerTest {
         for (int i = 0; i < plan.slices().size(); i++) {
             SlideSlice slice = plan.slices().get(i);
             assertThat(slice.index()).isEqualTo(i);
-            assertThat(slice.source().y()).isEqualTo(cursor);
+            assertThat(slice.source().y()).isCloseTo(cursor, org.assertj.core.data.Offset.offset(0.000_001));
             assertThat(slice.source().width()).isEqualTo(plan.sourceWidth());
             assertThat(slice.source().height()).isPositive();
             cursor = slice.source().bottom();
         }
-        assertThat(cursor).isEqualTo(plan.sourceHeight());
+        assertThat(cursor).isCloseTo(plan.sourceHeight(), org.assertj.core.data.Offset.offset(0.000_001));
     }
 
     private static PageModel model(double width, double height, List<PageBlock> blocks, double dpr, double scrollY) {

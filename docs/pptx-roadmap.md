@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код завершённой M5 feature-ветки (M3–M5 ещё не выпущены). Последующие M6+ разделы остаются целевой архитектурой.
+Ниже описан код завершённой M6 feature-ветки (M3–M6 ещё не выпущены). Последующие M7+ разделы остаются целевой архитектурой.
 
 ### HTTP и orchestration
 
@@ -252,11 +252,11 @@ Visual и editable modes полностью локальны и детермин
 
 ### M6 — authoring hints `data-pptx-*`
 
-- **Status:** planned
+- **Status:** completed on feature branch (2026-10-05; not released)
 - **Target version:** `0.3.x`
 - **Issue:** [#16 — data-pptx authoring hints](https://github.com/denspbru/ocapp/issues/16)
 - **Dependencies:** M1, M2; для `render="native"` — M3/M4/M5 по типу блока.
-- **Deliverables:** versioned attribute contract для `data-pptx-slide`, `data-pptx-title`, `data-pptx-ignore`, `data-pptx-keep-together`, `data-pptx-notes`, `data-pptx-layout`, `data-pptx-render="image|native"`; parser/validator; precedence rules.
+- **Deliverables:** реализован contract v1 (`data-pptx-slide="break-before"`, bounded title/notes, boolean ignore/keep-together, built-in `blank|title-only`, `image|native`), bounded browser parser, independent Java validator, deterministic precedence resolver и OOXML contract/warning metadata. `layout` здесь semantic profile, не M7 template/master loader.
 - **Acceptance criteria:**
   - explicit valid hints имеют документированный приоритет над heuristics;
   - страницы без hints сохраняют автоматическое поведение;
@@ -449,12 +449,13 @@ Native objects не обязательны. Этот mode должен оста�
 | 2026-09-30 | Разрешать AI только как optional explicit opt-in | Конвертация должна работать локально, предсказуемо и без скрытой передачи данных | Visual/editable modes не используют AI; summary имеет deterministic baseline |
 | 2026-10-04 | Включить M3 hybrid renderer по умолчанию с operator compatibility switch | Issue #13 должен работать через существующий `/MakePPTX`, но M2 visual output нужен для rollback/compatibility | `converter.pptx.editable-enabled=false` возвращает DOM-aware full-width screenshot path; extraction/planner failure сохраняет legacy fixed slicing |
 | 2026-10-04 | Считать M3 acceptance доказанным после внешнего LibreOffice render | POI structure и browser-side crops недостаточны для проверки реального office layout | Opt-in bounded gate проверяет Impress PDF page, unique text, hyperlink annotation и representative native/fallback pixels; M8 остаётся полной cross-fixture baseline системой |
+| 2026-10-05 | Зафиксировать authoring hints contract v1 внутри `0.3.x` и PPTX custom property | HTML authors нужен стабильный allowlist без преждевременного M7 template API | Invalid hints становятся bounded content-free warnings/validation errors; security/limits и representation fallback всегда выше hints; no-hint behavior сохранён |
 
 ## 12. Open questions
 
 1. Нужен ли versioned public `mode` contract поверх operator-level `converter.pptx.editable-enabled`, и как мигрировать default при появлении такого поля?
 2. Должен ли API возвращать warnings/metrics через headers, sidecar JSON endpoint, multipart response или отдельный asynchronous job contract?
-3. Как версионировать `PageModel` и `data-pptx-*`: внутренний schema version, публичный contract version или оба?
+3. Нужно ли в следующей несовместимой версии добавить HTML-level version selector? M6 v1 фиксируется реализацией `0.3.x` и PPTX property `ocapp.authoring-hints.contract=1`; неизвестные values fail safely.
 4. Какие thresholds считаются достаточными для native rendering: supported CSS allowlist, overlap tolerance, fallback area ratio и font substitution policy?
 5. Какой toolchain является эталонным для PPTX-to-image visual regression и какие версии PowerPoint/LibreOffice официально поддерживаются?
 6. Где проходит граница template trust: только operator-installed files, signed templates или upload per request?

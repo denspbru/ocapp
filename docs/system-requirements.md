@@ -51,6 +51,24 @@ Bounded readiness включает:
 
 Scripts никогда не принимаются через API. Delayed Canvas/ECharts может создать marker после завершения render.
 
+## M6 authoring hints contract v1
+
+OCApp `0.3.x` распознаёт только следующий versioned allowlist: `data-pptx-slide="break-before"`, non-empty bounded `data-pptx-title`, boolean `data-pptx-ignore`, boolean `data-pptx-keep-together`, non-empty bounded `data-pptx-notes`, `data-pptx-layout="blank|title-only"`, `data-pptx-render="image|native"`. Boolean form — attribute без value/empty или `true`; `false` отключает hint. Enum и boolean values trim/case-normalize; title/notes сохраняют bounded source value.
+
+Parser работает внутри уже bounded extraction pass. Invalid enum/boolean/blank text не попадает в normalized `AuthoringHints`, создаёт content-free `PPTX_HINT_INVALID` в общем `page-model.max-warnings` budget и далее эквивалентен отсутствию hint. Независимый Java validator разрешает только normalized values и иначе возвращает stable content-free `PAGEMODEL_INVALID`. Text metadata по-прежнему ограничены `max-field-length`, `max-metadata-characters` и общими model limits.
+
+Порядок решений:
+
+1. URL/navigation policy, browser isolation, readiness и все resource/output limits не могут быть ослаблены hints.
+2. `ignore=true` исключает subtree до model/planning; `false` сохраняет automatic behavior.
+3. `slide=break-before` имеет приоритет над whitespace/block heuristics и конфликтующим `keep-together`; minimum slice, max-slides и valid geometry остаются обязательны.
+4. `keep-together=true` защищает помещающийся block только от heuristic split; oversized content получает прежний deterministic forced split.
+5. `render=image` создаёт один bounded localized crop корня, подавляет descendants и тем самым не дублирует region; ancestor image выше descendant native.
+6. `render=native` — preference, а не bypass: unsafe/unrepresentable transform, clipping, overlap, type/style/asset всё равно использует localized screenshot fallback.
+7. Для каждого итогового slide первый non-empty title/notes/layout по `(domOrder,id)` побеждает; другой value даёт максимум один `PPTX_HINT_CONFLICT` на attribute/slide без values в warning. Максимум conflict warnings равен трём на slide и дополнительно ограничен `pptx.max-slides`.
+
+Title создаётся как POI title placeholder, notes — как speaker-notes body. `layout` выбирает только встроенный semantic profile (`blank`/`title-only`) и записывается в slide name; загрузка templates/master layouts остаётся M7. PPTX custom property `ocapp.authoring-hints.contract=1` фиксирует contract version. Pages без hints сохраняют M2–M5 automatic planning/rendering.
+
 ## Resource bounds
 
 До expensive allocation проверяются CDP layout width/height/pixels. Base64 decoded upper bound проверяется до decode, а PNG signature/IHDR dimensions — до `ImageIO`. PDF использует CDP `ReturnAsStream` и bounded chunks. PPTX ограничен screenshot bytes/pixels, slides, per-crop PNG и final ZIP bounded streams. Controlled overflow возвращает `413 OUTPUT_TOO_LARGE`.
