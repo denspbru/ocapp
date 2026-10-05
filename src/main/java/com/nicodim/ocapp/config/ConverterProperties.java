@@ -150,6 +150,9 @@ public class ConverterProperties {
         private boolean editableEnabled = true;
         private boolean legacyFallbackEnabled = true;
         @Min(1) @Max(10_000) private int maxItemsPerSlide = 1_000;
+        @Min(1) @Max(20_000) private int maxNativeTableCells = 500;
+        @Min(1) @Max(100) private int maxNativeTableColumns = 12;
+        @DecimalMin("1.0") private double minNativeTableColumnPoints = 18;
         @DecimalMin("1.0") private double minSliceHeightPixels = 120;
         public double getSlideWidthInches() { return slideWidthInches; } public void setSlideWidthInches(double v) { slideWidthInches = v; }
         public double getSlideHeightInches() { return slideHeightInches; } public void setSlideHeightInches(double v) { slideHeightInches = v; }
@@ -158,6 +161,9 @@ public class ConverterProperties {
         public boolean isEditableEnabled() { return editableEnabled; } public void setEditableEnabled(boolean v) { editableEnabled = v; }
         public boolean isLegacyFallbackEnabled() { return legacyFallbackEnabled; } public void setLegacyFallbackEnabled(boolean v) { legacyFallbackEnabled = v; }
         public int getMaxItemsPerSlide() { return maxItemsPerSlide; } public void setMaxItemsPerSlide(int v) { maxItemsPerSlide = v; }
+        public int getMaxNativeTableCells() { return maxNativeTableCells; } public void setMaxNativeTableCells(int v) { maxNativeTableCells = v; }
+        public int getMaxNativeTableColumns() { return maxNativeTableColumns; } public void setMaxNativeTableColumns(int v) { maxNativeTableColumns = v; }
+        public double getMinNativeTableColumnPoints() { return minNativeTableColumnPoints; } public void setMinNativeTableColumnPoints(double v) { minNativeTableColumnPoints = v; }
         public double getMinSliceHeightPixels() { return minSliceHeightPixels; } public void setMinSliceHeightPixels(double v) { minSliceHeightPixels = v; }
     }
 }

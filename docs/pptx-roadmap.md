@@ -224,11 +224,11 @@ Visual и editable modes полностью локальны и детермин
 
 ### M4 — редактируемые lists и tables
 
-- **Status:** planned
+- **Status:** done on feature branch; unreleased — unit/POI reopen and opt-in real-browser/LibreOffice gates
 - **Target version:** `0.3`
 - **Issue:** [#14 — editable lists and paginated tables](https://github.com/denspbru/ocapp/issues/14)
 - **Dependencies:** M3; pagination contract M2.
-- **Deliverables:** nested list mapping; native table renderer; row pagination and repeated headers; merged-cell handling; documented wide-table policy.
+- **Deliverables:** LI-level native bullet/number mapping through nesting level 8; native XSLFTable renderer; deterministic whole-row selection with repeated contiguous leading TH rows; supported merges; bounded fallback policy (`500` cells, `12` columns, `18pt` average column width by default). Row-spans crossing a page boundary and unsupported CSS table presentation use localized screenshot fallback.
 - **Acceptance criteria:**
   - ordered/unordered markers и поддержанная nesting depth сохраняются;
   - table cells остаются редактируемыми, widths/heights/fills/borders/alignment и supported merges воспроизводятся;

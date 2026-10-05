@@ -1,6 +1,7 @@
 package com.nicodim.ocapp.pptx;
 
 import com.nicodim.ocapp.pagemodel.AssetReference;
+import com.nicodim.ocapp.pagemodel.TableSemantics;
 import java.net.URI;
 import java.util.List;
 
@@ -22,6 +23,17 @@ public sealed interface RenderItem {
 
     /** A safe embedded raster image rendered as a native PPTX picture. */
     record NativeImage(Rect bounds, AssetReference asset) implements RenderItem { }
+
+    /** One editable native list item. */
+    record NativeListItem(Rect bounds, boolean ordered, int start, int level, String marker,
+                          String textAlign, double lineHeightPixels, List<TextSpan> spans) implements RenderItem {
+        public NativeListItem { spans = List.copyOf(spans); marker = marker == null ? "" : marker; }
+    }
+
+    /** One editable native table fragment; row indexes refer to source-table rows. */
+    record NativeTable(Rect bounds, TableSemantics table, List<Integer> rows) implements RenderItem {
+        public NativeTable { rows = List.copyOf(rows); }
+    }
 
     /** A visually ambiguous region rendered from the bounded full-page screenshot. */
     record ScreenshotCrop(Rect bounds) implements RenderItem { }

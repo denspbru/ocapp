@@ -128,6 +128,9 @@ converter.security.allow-private-addresses=true
 | `converter.pptx.editable-enabled` | `true` | Hybrid M3: native text/images/simple backgrounds плюс localized screenshot fallback; `false` сохраняет M2 full-width visual slices |
 | `converter.pptx.legacy-fallback-enabled` | `true` | При ошибке extraction/planner использовать прежние fixed-height slices; max-slides не fallback-ится |
 | `converter.pptx.max-items-per-slide` | `1000` | Pre-POI shape budget; при превышении slide безопасно сворачивается в один screenshot crop |
+| `converter.pptx.max-native-table-cells` | `500` | Максимум source cells для native editable table; larger tables use localized screenshot fallback |
+| `converter.pptx.max-native-table-columns` | `12` | Максимум columns для native editable table |
+| `converter.pptx.min-native-table-column-points` | `18` | Минимальная средняя ширина native column после CSS→points mapping; более широкая/плотная table rasterizes locally |
 | `converter.pptx.min-slice-height-pixels` | `120` | Минимальная CSS-высота эвристического/explicit slice |
 | `converter.page-model.max-blocks` / `max-depth` | `5000` / `64` | DOM model graph bounds до materialization |
 | `converter.page-model.max-text-length` / `max-table-cells` | `1000000` / `20000` | Общий text и table-cell budgets |
@@ -154,7 +157,7 @@ Chromium по-прежнему создаёт один full-page PNG в уже �
 
 ## Editable text and images (M3)
 
-При `converter.pptx.editable-enabled=true` deterministic planner классифицирует уже paginated PageModel в CSS pixels. Простые text runs становятся XSLF text boxes с font family/size/weight/style/color, alignment, line spacing и clickable links; безопасные embedded raster data assets становятся native pictures с сохранением aspect ratio и CSS position; простые backgrounds становятся shapes. LIST/TABLE (M4 scope), SVG/Canvas/chart, clipping, transforms, overlap groups, unsupported colors/styles и external/non-raster images получают localized crops из того же bounded full-page screenshot. Crop подавляет native content под теми же pixels, поэтому mixed slide не теряет и не дублирует область.
+При `converter.pptx.editable-enabled=true` deterministic planner классифицирует уже paginated PageModel в CSS pixels. Простые text runs становятся XSLF text boxes с font family/size/weight/style/color, alignment, line spacing и clickable links; ordered/unordered LI становятся native bullets/auto-numbering до nesting level 8; supported TABLE становится editable XSLFTable с proportional widths/heights, fills, borders, alignment и merges. Long tables select whole source rows deterministically and repeat contiguous leading TH rows. Tables over configured cell/column/minimum-width bounds, unsupported styles, or row-spans crossing pagination use a localized screenshot fallback. Безопасные embedded raster data assets становятся native pictures с сохранением aspect ratio и CSS position; простые backgrounds становятся shapes. SVG/Canvas/chart, clipping, transforms, overlap groups, unsupported colors/styles и external/non-raster images получают localized crops из того же bounded full-page screenshot. Crop подавляет native content под теми же pixels, поэтому mixed slide не теряет и не дублирует область.
 
 Один uniform CSS-px-to-point mapper используется для всех native и fallback shapes. Asset count/decoded bytes/dimensions, shapes per slide, total localized crop pixels, screenshot bytes, slides и final ZIP проверяются до соответствующих дорогих allocations. `converter.pptx.editable-enabled=false` сохраняет M2 DOM-aware full-width screenshot output; extraction/planner failure по-прежнему использует fixed-height legacy path, если он разрешён.
 

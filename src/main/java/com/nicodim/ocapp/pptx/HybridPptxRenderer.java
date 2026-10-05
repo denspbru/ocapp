@@ -4,6 +4,7 @@ import com.nicodim.ocapp.browser.BoundedByteArrayOutputStream;
 import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.pagemodel.AssetReference;
 import com.nicodim.ocapp.pagemodel.PageModel;
+import com.nicodim.ocapp.pagemodel.TableSemantics;
 import com.nicodim.ocapp.pagination.PaginationPlan;
 import com.nicodim.ocapp.pagination.SlideSlice;
 import com.nicodim.ocapp.support.ConversionException;
@@ -22,8 +23,11 @@ import java.util.Map;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import org.apache.poi.sl.usermodel.AutoNumberingScheme;
 import org.apache.poi.sl.usermodel.PictureData;
 import org.apache.poi.sl.usermodel.ShapeType;
+import org.apache.poi.sl.usermodel.TableCell.BorderEdge;
+import org.apache.poi.sl.usermodel.StrokeStyle;
 import org.apache.poi.sl.usermodel.TextParagraph;
 import org.apache.poi.sl.usermodel.VerticalAlignment;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
@@ -31,6 +35,8 @@ import org.apache.poi.xslf.usermodel.XSLFHyperlink;
 import org.apache.poi.xslf.usermodel.XSLFPictureData;
 import org.apache.poi.xslf.usermodel.XSLFPictureShape;
 import org.apache.poi.xslf.usermodel.XSLFSlide;
+import org.apache.poi.xslf.usermodel.XSLFTable;
+import org.apache.poi.xslf.usermodel.XSLFTableCell;
 import org.apache.poi.xslf.usermodel.XSLFTextBox;
 import org.apache.poi.xslf.usermodel.XSLFTextParagraph;
 import org.apache.poi.xslf.usermodel.XSLFTextRun;
@@ -49,7 +55,8 @@ public final class HybridPptxRenderer {
         List<List<RenderItem>> slideItems = new ArrayList<>(plan.slices().size());
         long cropPixels = 0;
         for (SlideSlice slice : plan.slices()) {
-            List<RenderItem> items = planner.plan(model, slice, maxItems);
+            List<RenderItem> items = planner.plan(model, slice, maxItems, properties.getPptx().getMaxNativeTableCells(),
+                properties.getPptx().getMaxNativeTableColumns(), properties.getPptx().getMinNativeTableColumnPoints());
             if (items.size() > maxItems) throw tooLarge("PPTX shape count exceeds the configured limit");
             for (RenderItem item : items) if (item instanceof RenderItem.ScreenshotCrop crop) {
                 PixelRect pixels = pixelRect(crop.bounds(), screenshot, model);
@@ -77,6 +84,8 @@ public final class HybridPptxRenderer {
                         case RenderItem.NativeBackground background -> addBackground(slide, mapper, background);
                         case RenderItem.ScreenshotCrop crop -> addCrop(show, slide, mapper, screenshot, model, crop);
                         case RenderItem.NativeText text -> addText(slide, mapper, text);
+                        case RenderItem.NativeListItem list -> addList(slide, mapper, list);
+                        case RenderItem.NativeTable table -> addTable(slide, mapper, table);
                         case RenderItem.NativeImage image -> addImage(show, slide, mapper, image, nativePictures, assetBytes);
                     }
                 }
@@ -145,6 +154,103 @@ public final class HybridPptxRenderer {
             }
         }
     }
+
+    private static void addList(XSLFSlide slide, CssCoordinateMapper mapper, RenderItem.NativeListItem item) {
+        XSLFTextBox box = slide.createTextBox();
+        box.setAnchor(mapper.map(item.bounds()));
+        box.setLeftInset(0); box.setRightInset(0); box.setTopInset(0); box.setBottomInset(0);
+        box.setVerticalAlignment(VerticalAlignment.TOP); box.setWordWrap(true); box.clearText();
+        XSLFTextParagraph paragraph = box.addNewTextParagraph();
+        paragraph.setTextAlign(alignment(item.textAlign())); paragraph.setSpaceBefore(0d); paragraph.setSpaceAfter(0d);
+        paragraph.setIndentLevel(item.level());
+        double margin = 18d + item.level() * 18d;
+        paragraph.setLeftMargin(margin); paragraph.setIndent(-12d);
+        if (item.ordered()) paragraph.setBulletAutoNumber(numbering(item.marker()), Math.max(1, item.start()));
+        else if (!"none".equalsIgnoreCase(item.marker())) {
+            paragraph.setBullet(true); paragraph.setBulletCharacter(bulletCharacter(item.marker()));
+        }
+        applySpans(paragraph, item.spans(), item.lineHeightPixels());
+    }
+
+    private static void addTable(XSLFSlide slide, CssCoordinateMapper mapper, RenderItem.NativeTable item) {
+        TableSemantics semantics = item.table();
+        XSLFTable table = slide.createTable(item.rows().size(), semantics.columns());
+        Rectangle2D anchor = mapper.map(item.bounds());
+        table.setAnchor(anchor);
+        List<Double> widths = semantics.columnWidths().size() == semantics.columns() ? semantics.columnWidths()
+            : java.util.Collections.nCopies(semantics.columns(), 1d);
+        double widthTotal = widths.stream().mapToDouble(Double::doubleValue).sum();
+        for (int column = 0; column < semantics.columns(); column++)
+            table.setColumnWidth(column, anchor.getWidth() * widths.get(column) / widthTotal);
+        List<Double> heights = semantics.rowHeights().size() == semantics.rows() ? semantics.rowHeights()
+            : java.util.Collections.nCopies(semantics.rows(), 1d);
+        double heightTotal = item.rows().stream().mapToDouble(heights::get).sum();
+        for (int row = 0; row < item.rows().size(); row++)
+            table.setRowHeight(row, anchor.getHeight() * heights.get(item.rows().get(row)) / heightTotal);
+        Map<Integer,Integer> rowMap = new HashMap<>();
+        for (int row = 0; row < item.rows().size(); row++) rowMap.put(item.rows().get(row), row);
+        for (TableSemantics.Cell source : semantics.cells()) {
+            Integer row = rowMap.get(source.row());
+            if (row == null) continue;
+            boolean spanPresent = true;
+            for (int r = source.row(); r < source.row() + source.rowSpan(); r++) spanPresent &= rowMap.containsKey(r);
+            if (!spanPresent) continue;
+            XSLFTableCell cell = table.getCell(row, source.column());
+            cell.setText(source.text()); cell.setLeftInset(3); cell.setRightInset(3); cell.setTopInset(2); cell.setBottomInset(2);
+            Color fill = CssColors.parse(source.fillColor());
+            if (fill != null && fill.getAlpha() > 0) cell.setFillColor(opaque(fill));
+            cell.setVerticalAlignment(vertical(source.verticalAlign()));
+            XSLFTextParagraph paragraph = cell.getTextParagraphs().getFirst();
+            paragraph.setTextAlign(alignment(source.textAlign())); paragraph.setSpaceBefore(0d); paragraph.setSpaceAfter(0d);
+            for (XSLFTextRun run : paragraph.getTextRuns()) {
+                run.setFontFamily(firstFont(source.fontFamily())); run.setFontSize(source.fontSize() * 72d / 96d);
+                run.setBold(source.fontWeight() >= 600); Color color = CssColors.parse(source.textColor());
+                if (color != null) run.setFontColor(opaque(color));
+            }
+            applyBorder(cell, BorderEdge.top, source.top()); applyBorder(cell, BorderEdge.right, source.right());
+            applyBorder(cell, BorderEdge.bottom, source.bottom()); applyBorder(cell, BorderEdge.left, source.left());
+            if (source.rowSpan() > 1 || source.columnSpan() > 1)
+                table.mergeCells(row, row + source.rowSpan() - 1, source.column(), source.column() + source.columnSpan() - 1);
+        }
+    }
+
+    private static void applySpans(XSLFTextParagraph paragraph, List<RenderItem.TextSpan> spans, double lineHeightPixels) {
+        RenderItem.TextSpan first = spans.getFirst();
+        double fontPixels = first.fontSizePoints() * 96d / 72d;
+        paragraph.setLineSpacing(Math.max(1d, lineHeightPixels / fontPixels * 100d));
+        for (RenderItem.TextSpan span : spans) {
+            XSLFTextRun run = paragraph.addNewTextRun(); run.setText(span.text()); String family = firstFont(span.fontFamily());
+            if (!family.isBlank()) run.setFontFamily(family); run.setFontSize(span.fontSizePoints());
+            run.setBold(span.fontWeight() >= 600); run.setItalic(span.italic()); Color color = CssColors.parse(span.colorCss());
+            if (color != null) run.setFontColor(opaque(color));
+            if (span.hyperlink() != null) run.createHyperlink().setAddress(span.hyperlink().toASCIIString());
+        }
+    }
+
+    private static void applyBorder(XSLFTableCell cell, BorderEdge edge, TableSemantics.Border border) {
+        if (border.widthPixels() <= 0 || "none".equalsIgnoreCase(border.style()) || "hidden".equalsIgnoreCase(border.style())) {
+            cell.removeBorder(edge); return;
+        }
+        cell.setBorderWidth(edge, border.widthPixels() * 72d / 96d);
+        Color color = CssColors.parse(border.color()); if (color != null) cell.setBorderColor(edge, opaque(color));
+        if ("dashed".equalsIgnoreCase(border.style())) cell.setBorderDash(edge, StrokeStyle.LineDash.DASH);
+        else if ("dotted".equalsIgnoreCase(border.style())) cell.setBorderDash(edge, StrokeStyle.LineDash.DOT);
+    }
+
+    private static AutoNumberingScheme numbering(String marker) {
+        return switch (marker == null ? "" : marker.toLowerCase(Locale.ROOT)) {
+            case "lower-alpha" -> AutoNumberingScheme.alphaLcPeriod; case "upper-alpha" -> AutoNumberingScheme.alphaUcPeriod;
+            case "lower-roman" -> AutoNumberingScheme.romanLcPeriod; case "upper-roman" -> AutoNumberingScheme.romanUcPeriod;
+            default -> AutoNumberingScheme.arabicPeriod;
+        };
+    }
+    private static String bulletCharacter(String marker) {
+        return switch (marker == null ? "" : marker.toLowerCase(Locale.ROOT)) { case "circle" -> "○"; case "square" -> "■"; default -> "•"; };
+    }
+    private static VerticalAlignment vertical(String value) {
+        return switch (value == null ? "" : value.toLowerCase(Locale.ROOT)) { case "bottom" -> VerticalAlignment.BOTTOM; case "middle", "center" -> VerticalAlignment.MIDDLE; default -> VerticalAlignment.TOP; };
+    }
+    private static Color opaque(Color color) { return new Color(color.getRed(), color.getGreen(), color.getBlue()); }
 
     private void addImage(XMLSlideShow show, XSLFSlide slide, CssCoordinateMapper mapper, RenderItem.NativeImage image,
                           Map<String, NativePicture> cache, long[] totalAssetBytes) throws IOException {

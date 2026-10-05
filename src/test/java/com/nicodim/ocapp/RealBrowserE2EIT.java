@@ -170,7 +170,38 @@ class RealBrowserE2EIT {
         }
     }
 
-    @Test void rendersMixedM3DeckThroughConfiguredLibreOffice() throws Exception {
+    @Test void convertsMixedM4ListsAndTableAsNativeEditableShapes() throws Exception {
+        BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
+        URI source = URI.create(fixtureBase + "/m3-mixed");
+        try (BrowserSession session = browserFactory.open()) {
+            session.driver().get(source.toASCIIString());
+            PageModel extracted = new DomPageExtractor(application.getBean(ConverterProperties.class).getPageModel()).extract(session.driver(), source);
+            PageBlock listItem = extracted.blocks().stream().filter(b -> b.type() == BlockType.LIST).findFirst().orElseThrow();
+            assertThat(listItem.list()).isNotNull();
+            assertThat(listItem.list().ordered()).isFalse();
+            assertThat(listItem.list().level()).isZero();
+            PageBlock table = extracted.blocks().stream().filter(b -> b.type() == BlockType.TABLE).findFirst().orElseThrow();
+            assertThat(table.table()).isNotNull();
+            assertThat(table.table().headerRows()).isEqualTo(1);
+            assertThat(table.table().columnWidths()).hasSize(2);
+            assertThat(table.table().rowHeights()).hasSize(2);
+            assertThat(table.table().cells()).anySatisfy(cell -> {
+                assertThat(cell.columnSpan()).isEqualTo(2);
+                assertThat(cell.fillColor()).contains("210");
+                assertThat(cell.top().widthPixels()).isGreaterThan(0);
+            });
+        }
+        Response response = post("/MakePPTX", fixtureBase + "/m3-mixed");
+        assertThat(response.status()).isEqualTo(200);
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(response.body()))) {
+            assertThat(show.getSlides()).hasSize(1);
+            assertThat(show.getSlides().getFirst().getShapes()).anyMatch(org.apache.poi.xslf.usermodel.XSLFTable.class::isInstance);
+            String xml = show.getSlides().getFirst().getXmlObject().toString();
+            assertThat(xml).contains("buChar").contains("M4 header").contains("M4 cell");
+        }
+    }
+
+    @Test void rendersMixedM4DeckThroughConfiguredLibreOffice() throws Exception {
         String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
         assumeTrue(!executable.isBlank(), "External-office smoke is opt-in; set -Docapp.e2e.libreoffice=/path/to/soffice");
         Path soffice = Path.of(executable).toAbsolutePath().normalize();
@@ -203,7 +234,7 @@ class RealBrowserE2EIT {
             try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
                 assertThat(document.getNumberOfPages()).isEqualTo(1);
                 String text = new PDFTextStripper().getText(document), compactText = text.replaceAll("\\s+", "");
-                for (String marker : List.of("EditableM3heading", "Paragraph", "editablespan", "M3link"))
+                for (String marker : List.of("EditableM3heading", "Paragraph", "editablespan", "M3link", "M4bullet", "M4header", "M4cell"))
                     assertThat(occurrences(compactText, marker)).withFailMessage("PDF text: %s", text).isEqualTo(1);
                 assertThat(document.getPage(0).getAnnotations()).filteredOn(PDAnnotationLink.class::isInstance)
                     .map(PDAnnotationLink.class::cast).anySatisfy(link -> {
@@ -339,8 +370,11 @@ class RealBrowserE2EIT {
             a{position:absolute;left:420px;top:125px;font-size:24px;line-height:32px}
             img{position:absolute;left:60px;top:220px;width:160px;height:80px}
             canvas{position:absolute;left:620px;top:120px;width:260px;height:140px}
+            ul{position:absolute;left:40px;top:330px;width:240px;font-size:22px}table{position:absolute;left:360px;top:330px;width:360px;border-collapse:collapse;font-size:20px}
+            th,td{border:2px solid rgb(30,60,90);padding:8px;text-align:center}th{background:rgb(210,225,245)}
             </style></head><body><h1 id='render-ready'>Editable M3 heading</h1>
             <p>Paragraph</p><span>editable span</span><a href='https://example.org/m3'>M3 link</a>
+            <ul><li>M4 bullet</li></ul><table><tr><th colspan='2'>M4 header</th></tr><tr><td>M4 cell</td><td>Editable</td></tr></table>
             <img alt='native magenta' src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAFElEQVR4nGO8o7GFAQaY4CwGBgYAKbYBvGsL5CEAAAAASUVORK5CYII='>
             <canvas id='fallback' width='260' height='140'></canvas><script>
             const c=document.querySelector('#fallback'),x=c.getContext('2d');x.fillStyle='rgb(35,90,210)';x.fillRect(0,0,c.width,c.height);
