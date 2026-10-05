@@ -30,7 +30,7 @@
   p{line-height:1.55;font-size:15px;color:var(--muted);}
 
   /* ---------- Page 1: Title ---------- */
-  #page-1{background:linear-gradient(135deg,#0d47a1 0%,#1565c0 45%,#1e88e5 100%);color:#fff;}
+  #page-1{background:#1565c0;color:#fff;}
   #page-1 .mark{position:absolute;top:-120px;right:-120px;width:420px;height:420px;border-radius:50%;background:rgba(255,255,255,.08);}
   #page-1 .mark2{position:absolute;bottom:-160px;left:-140px;width:380px;height:380px;border-radius:50%;background:rgba(255,255,255,.07);}
   #page-1 .inner{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:center;padding:0 96px;}
@@ -70,6 +70,8 @@
   #page-4 .risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;}
   #page-4 .risk-card h3{color:var(--accent);}
   #page-4 .risk-card ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;line-height:1.6;}
+  #page-4 .fallback-badge{width:128px;height:28px;margin-top:12px;padding:5px 8px;background:#fff3cd;
+    border:1px solid #e0a800;color:#664d03;font-size:12px;font-weight:700;}
 
   /* ---------- Page 5: Asset table ---------- */
   #page-5 table{width:100%;border-collapse:collapse;font-size:16px;}
@@ -92,8 +94,8 @@
 <body>
 
 <!-- ================= PAGE 1: TITLE ================= -->
-<section id="page-1" class="page" data-pptx-slide="new" data-pptx-title="Титульный лист">
-  <div class="mark"></div><div class="mark2"></div>
+<section id="page-1" class="page" data-pptx-title="Титульный лист">
+  <div class="mark" data-pptx-ignore></div><div class="mark2" data-pptx-ignore></div>
   <div class="inner">
     <div class="kicker">Годовой финансовый отчёт · FY2026</div>
     <h1>Nordic Vector Holding</h1>
@@ -108,7 +110,7 @@
 </section>
 
 <!-- ================= PAGE 2: CONTENTS ================= -->
-<section id="page-2" class="page pad" data-pptx-slide="new" data-pptx-title="Содержание">
+<section id="page-2" class="page pad" data-pptx-slide="break-before" data-pptx-title="Содержание">
   <div class="kicker">Обзор</div>
   <h2>Содержание</h2>
   <ul class="toc-list">
@@ -121,17 +123,17 @@
 </section>
 
 <!-- ================= PAGE 3: CHARTS ================= -->
-<section id="page-3" class="page pad" data-pptx-slide="new" data-pptx-title="Доходность и структура капитала">
+<section id="page-3" class="page pad" data-pptx-slide="break-before" data-pptx-title="Доходность и структура капитала">
   <div class="kicker">Финансовая аналитика</div>
   <h2>Доходность капитала и структура капитала</h2>
   <div class="charts-row">
     <div class="chart-card">
       <h3>Доходность капитала за год, индекс (база = 100)</h3>
-      <svg viewBox="0 0 760 220" width="100%" height="200" data-pptx-chart>
+      <svg viewBox="0 0 760 220" width="100%" height="200">
         <line x1="40" y1="20" x2="40" y2="190" stroke="#d9e0e7"/>
         <line x1="40" y1="190" x2="740" y2="190" stroke="#d9e0e7"/>
-        <text x="30" y="24" class="axis-label" text-anchor="end">140</text>
-        <text x="30" y="194" class="axis-label" text-anchor="end">95</text>
+        <text x="30" y="24" font-size="11" fill="#5d6b7a" text-anchor="end">140</text>
+        <text x="30" y="194" font-size="11" fill="#5d6b7a" text-anchor="end">95</text>
         <polyline fill="none" stroke="#1565c0" stroke-width="3"
           points="40.0,171.1 103.6,160.7 167.3,171.5 230.9,173.5 294.5,177.2 358.2,163.7 421.8,151.8 485.5,131.8 549.1,141.0 612.7,137.8 676.4,149.0 740.0,153.1"/>
         <polygon fill="#1565c0" opacity="0.08"
@@ -148,24 +150,24 @@
         <circle cx="612.7" cy="137.8" r="3.5" fill="#1565c0"/>
         <circle cx="676.4" cy="149.0" r="3.5" fill="#1565c0"/>
         <circle cx="740.0" cy="153.1" r="3.5" fill="#1565c0"/>
-        <text x="40.0" y="212" class="axis-label" text-anchor="middle">Янв</text>
-        <text x="103.6" y="212" class="axis-label" text-anchor="middle">Фев</text>
-        <text x="167.3" y="212" class="axis-label" text-anchor="middle">Мар</text>
-        <text x="230.9" y="212" class="axis-label" text-anchor="middle">Апр</text>
-        <text x="294.5" y="212" class="axis-label" text-anchor="middle">Май</text>
-        <text x="358.2" y="212" class="axis-label" text-anchor="middle">Июн</text>
-        <text x="421.8" y="212" class="axis-label" text-anchor="middle">Июл</text>
-        <text x="485.5" y="212" class="axis-label" text-anchor="middle">Авг</text>
-        <text x="549.1" y="212" class="axis-label" text-anchor="middle">Сен</text>
-        <text x="612.7" y="212" class="axis-label" text-anchor="middle">Окт</text>
-        <text x="676.4" y="212" class="axis-label" text-anchor="middle">Ноя</text>
-        <text x="740.0" y="212" class="axis-label" text-anchor="middle">Дек</text>
+        <text x="40.0" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Янв</text>
+        <text x="103.6" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Фев</text>
+        <text x="167.3" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Мар</text>
+        <text x="230.9" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Апр</text>
+        <text x="294.5" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Май</text>
+        <text x="358.2" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Июн</text>
+        <text x="421.8" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Июл</text>
+        <text x="485.5" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Авг</text>
+        <text x="549.1" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Сен</text>
+        <text x="612.7" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Окт</text>
+        <text x="676.4" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Ноя</text>
+        <text x="740.0" y="212" font-size="11" fill="#5d6b7a" text-anchor="middle">Дек</text>
       </svg>
       <div class="legend"><span><span class="swatch" style="background:#1565c0"></span>Индекс стоимости капитала, рост за год +4.8%</span></div>
     </div>
     <div class="chart-card">
       <h3>Структура капитала, sunburst</h3>
-      <svg viewBox="0 0 340 340" width="100%" height="200" data-pptx-chart>
+      <svg viewBox="0 0 340 340" width="100%" height="200">
         <path d="M 170.00 70.00 A 100 100 0 0 1 170.00 270.00 L 170.00 230.00 A 60 60 0 0 0 170.00 110.00 Z" fill="#2e7d32"/>
         <path d="M 170.00 270.00 A 100 100 0 0 1 74.89 139.10 L 112.94 151.46 A 60 60 0 0 0 170.00 230.00 Z" fill="#1565c0"/>
         <path d="M 74.89 139.10 A 100 100 0 0 1 170.00 70.00 L 170.00 110.00 A 60 60 0 0 0 112.94 151.46 Z" fill="#ef6c00"/>
@@ -198,7 +200,7 @@
 </section>
 
 <!-- ================= PAGE 4: KEY METRICS & RISKS ================= -->
-<section id="page-4" class="page pad" data-pptx-slide="new" data-pptx-title="Ключевые показатели и риски">
+<section id="page-4" class="page pad" data-pptx-slide="break-before" data-pptx-title="Ключевые показатели и риски">
   <div class="kicker">Финансовая аналитика</div>
   <h2>Ключевые показатели и риски</h2>
   <div class="kpi-grid">
@@ -223,13 +225,14 @@
         <li>Чувствительность облигационного портфеля к изменению ключевой ставки</li>
         <li>Концентрация краткосрочных обязательств в первом полугодии</li>
       </ul>
+      <div class="fallback-badge" data-pptx-render="image">Stress-tested</div>
     </div>
   </div>
   <div class="page-footer"><span>Nordic Vector Holding · Годовой отчёт FY2026</span><span>стр. 4 / 5</span></div>
 </section>
 
 <!-- ================= PAGE 5: ASSET TABLE ================= -->
-<section id="page-5" class="page pad" data-pptx-slide="new" data-pptx-title="Портфель активов">
+<section id="page-5" class="page pad" data-pptx-slide="break-before" data-pptx-title="Портфель активов">
   <div class="kicker">Финансовая аналитика</div>
   <h2>Портфель активов</h2>
   <table>

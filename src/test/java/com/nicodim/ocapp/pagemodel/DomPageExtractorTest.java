@@ -25,7 +25,9 @@ class DomPageExtractorTest {
     @Test void extractionScriptImplementsEveryV1HintAndContentFreeValidation() {
         assertThat(DomPageExtractor.SCRIPT).contains("data-pptx-slide", "data-pptx-title", "data-pptx-ignore",
             "data-pptx-keep-together", "data-pptx-notes", "data-pptx-layout", "data-pptx-render",
-            "PPTX_HINT_INVALID", "break-before", "title-only");
+            "PPTX_HINT_INVALID", "break-before", "title-only",
+            "(x>b.x||y>b.y||r<b.x+b.width||bt<b.y+b.height)",
+            "r.width<0||r.height<0");
         assertThat(DomPageExtractor.SCRIPT).doesNotContain("warning('PPTX_HINT_INVALID',id,raw)");
     }
 

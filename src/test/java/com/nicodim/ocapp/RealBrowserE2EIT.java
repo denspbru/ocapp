@@ -174,6 +174,84 @@ class RealBrowserE2EIT {
         }
     }
 
+    @Test void exportsTestReportEndpointAsHybridEditableDeckWithoutFullPageRasterization() throws Exception {
+        BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
+        ConverterProperties properties = application.getBean(ConverterProperties.class);
+        URI source = URI.create(applicationBase + "/test_report");
+        try (BrowserSession session = browserFactory.open()) {
+            session.driver().get(source.toASCIIString());
+            PageModel model = new DomPageExtractor(properties.getPageModel(), properties.getPptx()).extract(session.driver(), source);
+            assertThat(model.warnings()).isEmpty();
+            assertThat(model.blocks()).filteredOn(block -> !block.hints().title().isEmpty()).hasSize(5);
+            assertThat(model.blocks()).filteredOn(block -> block.type() == BlockType.TEXT
+                && block.textRuns().stream().anyMatch(run -> run.text().contains("Ключевые показатели")))
+                .allSatisfy(block -> assertThat(block.clipBounds()).isNull());
+            assertThat(model.assets()).filteredOn(asset -> asset.kind() == com.nicodim.ocapp.pagemodel.AssetReference.Kind.SVG)
+                .hasSize(2).allSatisfy(asset -> {
+                    assertThat(asset.embedded()).isTrue();
+                    assertThat(asset.mediaType()).isEqualTo("image/svg+xml");
+                });
+        }
+
+        Response response = post("/MakePPTX", source.toString());
+        assertThat(response.status()).withFailMessage("test_report PPTX response: %s",
+            new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(response.body()))) {
+            assertThat(show.getSlides()).hasSize(5);
+            assertThat(show.getSlides().stream().flatMap(slide -> slide.getShapes().stream())
+                .filter(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
+                .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast)
+                .map(org.apache.poi.xslf.usermodel.XSLFTextShape::getText).toList())
+                .anyMatch(text -> text.contains("Выручка"));
+            assertThat(show.getSlides().stream().flatMap(slide -> slide.getShapes().stream()).toList())
+                .anyMatch(org.apache.poi.xslf.usermodel.XSLFTable.class::isInstance);
+            assertThat(show.getPictureData()).extracting(org.apache.poi.sl.usermodel.PictureData::getType)
+                .contains(org.apache.poi.sl.usermodel.PictureData.PictureType.SVG,
+                    org.apache.poi.sl.usermodel.PictureData.PictureType.PNG);
+            assertThat(show.getSlides()).allSatisfy(slide -> assertThat(slide.getShapes())
+                .filteredOn(XSLFPictureShape.class::isInstance).allSatisfy(shape -> {
+                    assertThat(shape.getAnchor().getWidth()).isLessThan(show.getPageSize().getWidth() - .01);
+                    assertThat(shape.getAnchor().getHeight()).isLessThan(show.getPageSize().getHeight() - .01);
+                }));
+            assertThat(show.getSlides().stream().flatMap(slide -> slide.getShapes().stream())
+                .filter(XSLFPictureShape.class::isInstance).map(XSLFPictureShape.class::cast)
+                .filter(shape -> shape.getPictureData().getType() == org.apache.poi.sl.usermodel.PictureData.PictureType.PNG)
+                .map(shape -> shape.getAnchor().getWidth()).toList()).anyMatch(width -> width < 150);
+        }
+
+        String artifactSetting = configured("ocapp.e2e.artifactsDir", "OCAPP_E2E_ARTIFACTS_DIR");
+        if (!artifactSetting.isBlank()) {
+            Path work = Path.of(artifactSetting).toAbsolutePath().normalize();
+            Files.createDirectories(work);
+            Path deck = work.resolve("test-report-after.pptx");
+            Files.write(deck, response.body());
+            String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
+            if (!executable.isBlank()) {
+                Path profile = work.resolve("libreoffice-test-report-profile");
+                Path pdf = work.resolve("test-report-after.pdf"), log = work.resolve("test-report-libreoffice.log");
+                try {
+                    Process process = new ProcessBuilder(executable, "--headless", "--nologo", "--nodefault", "--nolockcheck",
+                        "--norestore", "-env:UserInstallation=" + profile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
+                        "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+                    boolean completed = process.waitFor(45, TimeUnit.SECONDS);
+                    if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
+                    assertThat(completed).withFailMessage("LibreOffice test_report conversion timed out; log=%s", log).isTrue();
+                    assertThat(process.exitValue()).withFailMessage("LibreOffice test_report exit; log=%s%n%s", log,
+                        Files.readString(log)).isZero();
+                    try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+                        assertThat(document.getNumberOfPages()).isEqualTo(5);
+                        String text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ");
+                        assertThat(text).contains("Nordic Vector Holding", "Портфель активов", "€123,575,000");
+                        BufferedImage image = new PDFRenderer(document).renderImageWithDPI(0, 144);
+                        assertThat(ImageIO.write(image, "png", work.resolve("test-report-after-page-1.png").toFile())).isTrue();
+                    }
+                } finally {
+                    deleteTree(profile);
+                }
+            }
+        }
+    }
+
     @Test void convertsMixedM4ListsAndTableAsNativeEditableShapes() throws Exception {
         BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
         URI source = URI.create(fixtureBase + "/m3-mixed");
