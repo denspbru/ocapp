@@ -182,7 +182,7 @@ class RealBrowserE2EIT {
             session.driver().get(source.toASCIIString());
             PageModel model = new DomPageExtractor(properties.getPageModel(), properties.getPptx()).extract(session.driver(), source);
             assertThat(model.warnings()).isEmpty();
-            assertThat(model.blocks()).filteredOn(block -> !block.hints().title().isEmpty()).hasSize(5);
+            assertThat(model.blocks()).filteredOn(block -> block.hints().breakBefore()).hasSize(4);
             assertThat(model.blocks()).filteredOn(block -> block.type() == BlockType.TEXT
                 && block.textRuns().stream().anyMatch(run -> run.text().contains("Ключевые показатели")))
                 .allSatisfy(block -> assertThat(block.clipBounds()).isNull());
@@ -198,25 +198,40 @@ class RealBrowserE2EIT {
             new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
         try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(response.body()))) {
             assertThat(show.getSlides()).hasSize(5);
+            List<String> nativeTitles = List.of("Nordic Vector Holding", "Содержание",
+                "Доходность капитала и структура капитала", "Ключевые показатели и риски", "Портфель активов");
+            for (int i = 0; i < nativeTitles.size(); i++) {
+                String title = nativeTitles.get(i);
+                assertThat(show.getSlides().get(i).getShapes())
+                    .filteredOn(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
+                    .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast)
+                    .filteredOn(shape -> shape.getText().equals(title))
+                    .singleElement().satisfies(shape -> assertThat(shape.getAnchor().getHeight()).isLessThan(100));
+            }
             assertThat(show.getSlides().stream().flatMap(slide -> slide.getShapes().stream())
                 .filter(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
                 .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast)
                 .map(org.apache.poi.xslf.usermodel.XSLFTextShape::getText).toList())
                 .anyMatch(text -> text.contains("Выручка"));
+            assertThat(show.getSlides()).allSatisfy(slide -> assertThat(slide.getShapes())
+                .anyMatch(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance));
             assertThat(show.getSlides().stream().flatMap(slide -> slide.getShapes().stream()).toList())
-                .anyMatch(org.apache.poi.xslf.usermodel.XSLFTable.class::isInstance);
-            assertThat(show.getPictureData()).extracting(org.apache.poi.sl.usermodel.PictureData::getType)
-                .contains(org.apache.poi.sl.usermodel.PictureData.PictureType.SVG,
-                    org.apache.poi.sl.usermodel.PictureData.PictureType.PNG);
+                .filteredOn(org.apache.poi.xslf.usermodel.XSLFTable.class::isInstance).hasSize(1);
+            List<XSLFPictureShape> pictures = show.getSlides().stream().flatMap(slide -> slide.getShapes().stream())
+                .filter(XSLFPictureShape.class::isInstance).map(XSLFPictureShape.class::cast).toList();
+            assertThat(pictures).filteredOn(shape -> shape.getPictureData().getType()
+                == org.apache.poi.sl.usermodel.PictureData.PictureType.SVG).hasSize(2);
             assertThat(show.getSlides()).allSatisfy(slide -> assertThat(slide.getShapes())
                 .filteredOn(XSLFPictureShape.class::isInstance).allSatisfy(shape -> {
                     assertThat(shape.getAnchor().getWidth()).isLessThan(show.getPageSize().getWidth() - .01);
                     assertThat(shape.getAnchor().getHeight()).isLessThan(show.getPageSize().getHeight() - .01);
                 }));
-            assertThat(show.getSlides().stream().flatMap(slide -> slide.getShapes().stream())
-                .filter(XSLFPictureShape.class::isInstance).map(XSLFPictureShape.class::cast)
+            assertThat(pictures.stream()
                 .filter(shape -> shape.getPictureData().getType() == org.apache.poi.sl.usermodel.PictureData.PictureType.PNG)
-                .map(shape -> shape.getAnchor().getWidth()).toList()).anyMatch(width -> width < 150);
+                .toList()).allSatisfy(shape -> {
+                    assertThat(shape.getAnchor().getWidth()).isLessThan(150);
+                    assertThat(shape.getAnchor().getHeight()).isLessThan(100);
+                }).isNotEmpty();
         }
 
         String artifactSetting = configured("ocapp.e2e.artifactsDir", "OCAPP_E2E_ARTIFACTS_DIR");
@@ -242,8 +257,12 @@ class RealBrowserE2EIT {
                         assertThat(document.getNumberOfPages()).isEqualTo(5);
                         String text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ");
                         assertThat(text).contains("Nordic Vector Holding", "Портфель активов", "€123,575,000");
-                        BufferedImage image = new PDFRenderer(document).renderImageWithDPI(0, 144);
-                        assertThat(ImageIO.write(image, "png", work.resolve("test-report-after-page-1.png").toFile())).isTrue();
+                        PDFRenderer renderer = new PDFRenderer(document);
+                        for (int page = 0; page < document.getNumberOfPages(); page++) {
+                            BufferedImage image = renderer.renderImageWithDPI(page, 144);
+                            assertThat(ImageIO.write(image, "png",
+                                work.resolve("test-report-after-page-" + (page + 1) + ".png").toFile())).isTrue();
+                        }
                     }
                 } finally {
                     deleteTree(profile);

@@ -56,7 +56,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 
 Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, safe/unsafe SVG, delayed Canvas, реально tainted cross-origin Canvas, delayed/missing ECharts, DOM-aware pagination, M6 hint extraction/precedence/OOXML metadata, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction и cleanup временных профилей.
 
-Опциональный external-office gate использует явно заданный локальный LibreOffice, отдельные bounded profiles и timeout; platform path не зашит в build. Он генерирует mixed M3 и graphics M5 decks реальным Chromium pipeline, экспортирует их Impress в PDF и рендерит PDF через PDFBox. M3 проверяет один slide/page, отсутствие потери/дублирования marker text, clickable URI, native image и localized Canvas fallback; M5 проверяет POI SVG+PNG picture types и видимые sanitized SVG, delayed Canvas и ECharts цвета; M6 проверяет две страницы, единственность title и видимый forced localized image. При заданном artifacts directory сохраняются исходные PPTX, PDF, PNG и LibreOffice logs:
+Опциональный external-office gate использует явно заданный локальный LibreOffice, отдельные bounded profiles и timeout; platform path не зашит в build. Он генерирует mixed M3, graphics M5, hints M6 и встроенный пятистраничный `test_report` реальным Chromium pipeline, экспортирует decks через Impress в PDF и рендерит PDF через PDFBox. M3 проверяет один slide/page, отсутствие потери/дублирования marker text, clickable URI, native image и localized Canvas fallback; M5 проверяет POI SVG+PNG picture types и видимые sanitized SVG, delayed Canvas и ECharts цвета; M6 проверяет две страницы, единственность title и видимый forced localized image; `test_report` проверяет пять hybrid slides, единственность native h1/h2, editable text/table, две SVG chart pictures, отсутствие slide-sized raster shape и сохраняет PNG preview каждой страницы. При заданном artifacts directory сохраняются исходные PPTX, PDF, PNG и LibreOffice logs:
 
 ```bash
 mvn -Preal-browser -Docapp.e2e.failClosed=true \
@@ -73,7 +73,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true \
 Встроенный default — `converter.security.egress-mode=PROXY` с пустым `proxy-url`, поэтому приложение **намеренно не запускается**, пока validating proxy не настроен:
 
 ```bash
-java -jar target/ocapp-0.3.0.jar \
+java -jar target/ocapp-0.3.1.jar \
   --converter.security.proxy-url=http://proxy.internal:3128 \
   --converter.browser.binary=/usr/bin/chromium \
   --converter.browser.driver-path=/usr/bin/chromedriver

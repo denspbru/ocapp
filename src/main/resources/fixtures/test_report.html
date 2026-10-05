@@ -45,11 +45,8 @@
 
   /* ---------- Page 2: Contents ---------- */
   #page-2 .toc-list{list-style:none;margin:0;padding:0;}
-  #page-2 .toc-list li{display:flex;align-items:baseline;padding:18px 0;border-bottom:1px solid var(--line);font-size:18px;}
-  #page-2 .toc-list .num{width:46px;font-size:22px;font-weight:700;color:var(--accent);}
-  #page-2 .toc-list .title{flex:1;font-weight:600;}
-  #page-2 .toc-list .dots{flex:1;border-bottom:2px dotted var(--line);margin:0 12px 6px;}
-  #page-2 .toc-list .pg{font-weight:700;color:var(--muted);}
+  #page-2 .toc-list li{display:block;padding:18px 0;border-bottom:1px solid var(--line);font-size:18px;
+    font-weight:600;color:var(--ink);}
 
   /* ---------- Page 3: Charts ---------- */
   #page-3 .charts-row{display:flex;gap:40px;margin-bottom:8px;}
@@ -94,7 +91,7 @@
 <body>
 
 <!-- ================= PAGE 1: TITLE ================= -->
-<section id="page-1" class="page" data-pptx-title="Титульный лист">
+<section id="page-1" class="page">
   <div class="mark" data-pptx-ignore></div><div class="mark2" data-pptx-ignore></div>
   <div class="inner">
     <div class="kicker">Годовой финансовый отчёт · FY2026</div>
@@ -105,25 +102,25 @@
       <div><div class="label">Дата отчёта</div><div class="value">02 октября 2026</div></div>
       <div><div class="label">Период</div><div class="value">Январь — Декабрь 2026</div></div>
     </div>
+    <div class="confidential">Конфиденциально · Только для внутреннего использования</div>
   </div>
-  <div class="confidential">Конфиденциально · Только для внутреннего использования</div>
 </section>
 
 <!-- ================= PAGE 2: CONTENTS ================= -->
-<section id="page-2" class="page pad" data-pptx-slide="break-before" data-pptx-title="Содержание">
+<section id="page-2" class="page pad" data-pptx-slide="break-before">
   <div class="kicker">Обзор</div>
   <h2>Содержание</h2>
   <ul class="toc-list">
-    <li><span class="num">01</span><span class="title">Титульный лист</span><span class="dots"></span><span class="pg">стр. 1</span></li>
-    <li><span class="num">02</span><span class="title">Содержание</span><span class="dots"></span><span class="pg">стр. 2</span></li>
-    <li><span class="num">03</span><span class="title">Доходность капитала и структура капитала</span><span class="dots"></span><span class="pg">стр. 3</span></li>
-    <li><span class="num">04</span><span class="title">Ключевые показатели и риски</span><span class="dots"></span><span class="pg">стр. 4</span></li>
-    <li><span class="num">05</span><span class="title">Портфель активов</span><span class="dots"></span><span class="pg">стр. 5</span></li>
+    <li>01 · Титульный лист — стр. 1</li>
+    <li>02 · Содержание — стр. 2</li>
+    <li>03 · Доходность капитала и структура капитала — стр. 3</li>
+    <li>04 · Ключевые показатели и риски — стр. 4</li>
+    <li>05 · Портфель активов — стр. 5</li>
   </ul>
 </section>
 
 <!-- ================= PAGE 3: CHARTS ================= -->
-<section id="page-3" class="page pad" data-pptx-slide="break-before" data-pptx-title="Доходность и структура капитала">
+<section id="page-3" class="page pad" data-pptx-slide="break-before">
   <div class="kicker">Финансовая аналитика</div>
   <h2>Доходность капитала и структура капитала</h2>
   <div class="charts-row">
@@ -200,7 +197,7 @@
 </section>
 
 <!-- ================= PAGE 4: KEY METRICS & RISKS ================= -->
-<section id="page-4" class="page pad" data-pptx-slide="break-before" data-pptx-title="Ключевые показатели и риски">
+<section id="page-4" class="page pad" data-pptx-slide="break-before">
   <div class="kicker">Финансовая аналитика</div>
   <h2>Ключевые показатели и риски</h2>
   <div class="kpi-grid">
@@ -232,7 +229,7 @@
 </section>
 
 <!-- ================= PAGE 5: ASSET TABLE ================= -->
-<section id="page-5" class="page pad" data-pptx-slide="break-before" data-pptx-title="Портфель активов">
+<section id="page-5" class="page pad" data-pptx-slide="break-before">
   <div class="kicker">Финансовая аналитика</div>
   <h2>Портфель активов</h2>
   <table>
