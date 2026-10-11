@@ -2,7 +2,7 @@
 
 ## 1. Назначение и область
 
-Сервис возвращает итоговое состояние динамической страницы как MHTML, PDF или image-based PPTX без server-side хранения результата. В scope: JavaScript/Canvas/SVG/ECharts, bounded readiness/resources, SSRF defense, enforced production egress proxy, correlation/health. Не входят UI, batch/scheduling, editable PPTX DOM objects, CAPTCHA/DRM/auth bypass, client cookies/Authorization.
+Сервис возвращает итоговое состояние динамической страницы как MHTML, PDF или hybrid editable/localized-fallback PPTX без server-side хранения результата. В scope: native simple text/background/border, safe embedded images, lists/tables, JavaScript/Canvas/SVG/ECharts, bounded readiness/resources, SSRF defense, enforced production egress proxy, correlation/health. Не входят UI, batch/scheduling, полная CSS-реконструкция, CAPTCHA/DRM/auth bypass, client cookies/Authorization.
 
 ## 2. API
 
@@ -26,7 +26,7 @@
 - **FR-005:** production startup fail-closed без validating HTTP proxy. Chromium proxy bypass/DNS/QUIC/non-proxied WebRTC закрыты; Java preflight использует тот же proxy. Application checks остаются defense in depth.
 - **FR-006:** отдельный `UNSAFE` mode требует acknowledgement и предназначен только для trusted local E2E.
 - **FR-007:** readiness bounded и включает base document readiness, fonts/images/Canvas, DOM quiet и selector либо trusted operator JS marker.
-- **FR-008:** MHTML — CDP snapshot; PDF — bounded CDP stream; PPTX — bounded full-page PNG slices и Apache POI.
+- **FR-008:** MHTML — CDP snapshot; PDF — bounded CDP stream; PPTX — renderer-independent PageModel/SmartPaginationPlanner, native Apache POI objects для консервативно поддержанного subset и bounded localized PNG fallback.
 - **FR-009:** layout dimensions/pixels, base64 decoded size, PNG IHDR, screenshot/output bytes и slide count проверяются до соответствующих дорогих allocations, где API это позволяет; overflow даёт controlled `413`.
 - **FR-010:** atomic queued/running/cancelling/finished ownership исключает start после queued cancel; отдельный atomic browser-start lifecycle закрывает race до/во время driver startup. Timeout выполняет bounded Selenium cleanup и graceful/forced termination same-user process tree; permits освобождаются владельцем после cleanup resolution.
 - **FR-011:** startup failure закрывает driver/service/profile; оба configured executables валидируются.

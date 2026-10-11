@@ -1,6 +1,6 @@
 # Roadmap интеллектуальной PPTX-конвертации
 
-Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-05.
+Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-12.
 
 ## 1. Цель и границы
 
@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код завершённой M6 feature-ветки (M3–M6 ещё не выпущены). Последующие M7+ разделы остаются целевой архитектурой.
+Ниже описан код `0.4.0`: M3 и M6 прошли acceptance hardening поверх выпущенного M3–M6 baseline. Последующие M7+ разделы остаются целевой архитектурой и в `0.4.0` не реализованы.
 
 ### HTTP и orchestration
 
@@ -210,17 +210,19 @@ Visual и editable modes полностью локальны и детермин
 
 ### M3 — редактируемые text и images
 
-- **Status:** released in `v0.3.0` — structural, real-browser mixed and LibreOffice-rendered regression checks passed
-- **Target version:** `0.3`
+- **Status:** acceptance hardening in `0.4.0`; issue #13 остаётся открытым до явного разрешения на закрытие
+- **Target version:** `0.4.0`
 - **Issue:** [#13 — editable text and images](https://github.com/denspbru/ocapp/issues/13)
 - **Dependencies:** M1, M2.
-- **Deliverables:** coordinate mapper; text-run/style mapper; link support; image asset pipeline; overlap/unsupported-style classifier; localized fallback compositor.
+- **Deliverables:** coordinate mapper; text-run/style mapper; link support; safe embedded image pipeline; native uniform opaque solid border for text/container blocks; overlap/unsupported-style classifier; localized fallback compositor. External/non-embedded assets and unsupported/non-uniform/dashed/dotted/complex/translucent borders remain localized screenshot fallback.
 - **Acceptance criteria:**
   - headings/paragraphs/simple spans редактируются в PowerPoint;
   - поддержанные font, size, weight, style, color, alignment и spacing сохраняются в заданных tolerances;
   - ссылки кликабельны, изображения сохраняют aspect ratio и ожидаемое положение;
   - неоднозначные CSS/overlap области переходят в локальный screenshot fallback без пропажи или дублирования content;
   - mixed native/fallback fixtures проходят structural и visual regression checks.
+
+Fidelity policy `0.4.0`: POI structural assertions use exact normalized values for bold/italic/alignment/link/color and ±`0.01 pt` for mapped placement, size and border width; aspect-ratio error is at most `0.1%`; line spacing is compared within ±`0.5` percentage point. LibreOffice visual evidence uses fixture-specific visible-color/text/page assertions rather than an unbounded global pixel tolerance. Font family is preserved in OOXML when supplied, but rendering may substitute an unavailable font; release fixtures use installed Arial-compatible fonts, and any environment-dependent substitution/reflow outside the tested tolerance requires localized fallback or a documented manual exception.
 
 ### M4 — редактируемые lists и tables
 
@@ -252,11 +254,11 @@ Visual и editable modes полностью локальны и детермин
 
 ### M6 — authoring hints `data-pptx-*`
 
-- **Status:** released in `v0.3.0` (2026-10-05)
-- **Target version:** `0.3.x`
+- **Status:** acceptance hardening in `0.4.0`; issue #16 остаётся открытым до явного разрешения на закрытие
+- **Target version:** `0.4.0`
 - **Issue:** [#16 — data-pptx authoring hints](https://github.com/denspbru/ocapp/issues/16)
 - **Dependencies:** M1, M2; для `render="native"` — M3/M4/M5 по типу блока.
-- **Deliverables:** реализован contract v1 (`data-pptx-slide="break-before"`, bounded title/notes, boolean ignore/keep-together, built-in `blank|title-only`, `image|native`), bounded browser parser, independent Java validator, deterministic precedence resolver и OOXML contract/warning metadata. `layout` здесь semantic profile, не M7 template/master loader.
+- **Deliverables:** реализован contract v1 (`data-pptx-slide="break-before"`, bounded title/notes, boolean ignore/keep-together, built-in `blank|title-only`, `image|native`), bounded browser parser, independent Java validator, deterministic precedence resolver и OOXML contract/warning metadata. Presence любого recognized attribute сохраняется отдельно от его normalized effect, поэтому false-only boolean forms также записывают contract metadata. `layout` здесь semantic profile, не M7 template/master loader.
 - **Acceptance criteria:**
   - explicit valid hints имеют документированный приоритет над heuristics;
   - страницы без hints сохраняют автоматическое поведение;
@@ -267,7 +269,7 @@ Visual и editable modes полностью локальны и детермин
 ### M7 — templates и branding
 
 - **Status:** planned
-- **Target version:** `0.3.x`
+- **Target version:** `0.4.x`
 - **Issue:** [#17 — PPTX templates, master layouts and branding](https://github.com/denspbru/ocapp/issues/17)
 - **Dependencies:** M3; M6 для per-block/per-slide layout hints.
 - **Deliverables:** validated `.pptx` template loader; master/layout selection; built-in default theme; logo/theme/fonts/footer/source URL/numbering options; template compatibility tests.
@@ -281,7 +283,7 @@ Visual и editable modes полностью локальны и детермин
 ### M8 — layout validation и visual regression
 
 - **Status:** planned
-- **Target version:** `0.3.x`
+- **Target version:** `0.4.x`
 - **Issue:** [#18 — layout validation and visual regression](https://github.com/denspbru/ocapp/issues/18)
 - **Dependencies:** M2, M3; расширение coverage по мере M4/M5/M7.
 - **Deliverables:** structural/layout validator; stable warning/error taxonomy; presentation quality metrics; isolated visual-regression profile; baseline approval/update procedure; diff artifacts.
@@ -295,7 +297,7 @@ Visual и editable modes полностью локальны и детермин
 ### M9 — semantic mode и optional AI
 
 - **Status:** planned
-- **Target version:** `0.4`
+- **Target version:** `0.5`
 - **Issue:** [#19 — semantic presentation mode with optional AI](https://github.com/denspbru/ocapp/issues/19)
 - **Dependencies:** stable M1 PageModel, M3/M4 native renderer, M7 templates, M8 validation.
 - **Deliverables:** deterministic section detection/ranking; `summary` slide planner; source attribution; optional provider interface; explicit consent/configuration/redaction/limits; audit-safe metadata.
@@ -313,8 +315,9 @@ Visual и editable modes полностью локальны и детермин
 | `0.1.x` | M0 hardening и общий backlog [#2](https://github.com/denspbru/ocapp/issues/2), [#6](https://github.com/denspbru/ocapp/issues/6), [#7](https://github.com/denspbru/ocapp/issues/7) | Безопасная bounded browser foundation и реальный Chromium smoke |
 | `0.2` | M1 PageModel + M2 smart screenshot pagination | DOM-aware visual PPTX при сохранённом legacy fallback |
 | `0.3.0` | M3 editable text/images + M4 lists/tables + M5 charts/media + M6 hints | Редактируемый hybrid renderer с bounded localized fallback и versioned authoring hints |
-| `0.3.x` | M7 templates + M8 validation | Управляемый branded hybrid renderer с расширенными quality gates |
-| `0.4` | M9 semantic mode | Deterministic summary и только opt-in external AI adapter |
+| `0.4.0` | M3 + M6 acceptance hardening | Border fidelity, stronger POI reopen evidence и false-only hint contract metadata |
+| `0.4.x` | M7 templates + M8 validation | Управляемый branded hybrid renderer с расширенными quality gates |
+| `0.5` | M9 semantic mode | Deterministic summary и только opt-in external AI adapter |
 | `1.0` | Production-ready consolidation | Стабильный контракт, эксплуатационные SLO/limits, compatibility и полная release validation |
 
 ## 7. Fixture и test matrix
@@ -414,17 +417,17 @@ Native objects не обязательны. Этот mode должен оста�
 
 - Text/images/lists/tables native-rendering criteria M3/M4 выполнены.
 - Localized fallback не теряет и не дублирует content в mixed fixtures.
-- PPTX открывается Apache POI, PowerPoint и LibreOffice на release fixtures.
+- Автоматизированный release gate: structural reopen Apache POI и visual render LibreOffice. Ручная проверка Microsoft PowerPoint выполняется при доступности и обязательна перед 1.0/GA; `0.4.0` не заявляет, что PowerPoint запускался.
 - Backward-compatible default mode утверждён contract test-ами и документацией.
 
-### `0.3.x`
+### `0.4.x`
 
-- M5–M8 completed в заявленном составе release; hints/template contracts versioned.
+- M7–M8 completed в заявленном составе release; hints/template contracts versioned.
 - Structural validation выполняется для каждого output, visual regression — в release test profile.
 - Security fixtures для SVG/Canvas/templates/blocked resources и resource limits зелёные.
 - Quality metrics и warning codes стабильны, bounded и документированы.
 
-### `0.4`
+### `0.5`
 
 - Summary mode работает offline без provider-а и не меняет visual/editable outputs.
 - AI adapter остаётся disabled-by-default; explicit opt-in, redaction/limits и no-provider-egress tests доказаны.
