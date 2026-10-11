@@ -1,6 +1,7 @@
 package com.nicodim.ocapp.pptx;
 
 import com.nicodim.ocapp.pagemodel.AssetReference;
+import com.nicodim.ocapp.pagemodel.CssBorder;
 import com.nicodim.ocapp.pagemodel.TableSemantics;
 import java.net.URI;
 import java.util.List;
@@ -14,12 +15,12 @@ public sealed interface RenderItem {
 
     /** A leaf text block rendered as an editable PPTX text box. */
     record NativeText(Rect bounds, String textAlign, double lineHeightPixels,
-                      String backgroundColorCss, List<TextSpan> spans) implements RenderItem {
+                      String backgroundColorCss, CssBorder border, List<TextSpan> spans) implements RenderItem {
         public NativeText { spans = List.copyOf(spans); }
     }
 
     /** A simple opaque/semitransparent-free CSS background rendered as an editable rectangle. */
-    record NativeBackground(Rect bounds, String colorCss) implements RenderItem { }
+    record NativeBackground(Rect bounds, String colorCss, CssBorder border) implements RenderItem { }
 
     /** A safe embedded raster image rendered as a native PPTX picture. */
     record NativeImage(Rect bounds, AssetReference asset) implements RenderItem { }

@@ -5,6 +5,7 @@ import com.nicodim.ocapp.pagemodel.AuthoringHints;
 import com.nicodim.ocapp.pagemodel.BlockType;
 import com.nicodim.ocapp.pagemodel.Bounds;
 import com.nicodim.ocapp.pagemodel.ComputedStyle;
+import com.nicodim.ocapp.pagemodel.CssBorder;
 import com.nicodim.ocapp.pagemodel.LinkReference;
 import com.nicodim.ocapp.pagemodel.PageBlock;
 import com.nicodim.ocapp.pagemodel.PageModel;
@@ -35,6 +36,7 @@ public final class EditableRenderPlanner {
     private static final Set<BlockType> GRAPHIC_TYPES = Set.of(BlockType.SVG, BlockType.CANVAS, BlockType.CHART);
     private static final Set<BlockType> LOCALIZED_FALLBACK_TYPES = Set.of(BlockType.FALLBACK);
     private static final double EPSILON = 0.000_001;
+    private static final double MAX_NATIVE_BORDER_PIXELS = 96;
 
     public List<RenderItem> plan(PageModel model, SlideSlice slice, int maxItemsPerSlide) {
         return plan(model, slice, maxItemsPerSlide, 500, 12, 18);
@@ -126,6 +128,8 @@ public final class EditableRenderPlanner {
         if (style == null || !Double.isFinite(style.opacity()) || Math.abs(style.opacity() - 1) > EPSILON) return true;
         java.awt.Color background = CssColors.parse(style.backgroundColor());
         if (background == null || (background.getAlpha() != 0 && background.getAlpha() != 255)) return true;
+        if (!supportedBorder(style.border()) || (style.border().visible()
+            && block.type() != BlockType.TEXT && block.type() != BlockType.CONTAINER)) return true;
         if (GRAPHIC_TYPES.contains(block.type())) return nativeGraphicAsset(block) == null;
         if (block.type() == BlockType.TEXT) return !supportedText(block);
         if (block.type() == BlockType.LIST) return !supportedList(block);
@@ -151,6 +155,18 @@ public final class EditableRenderPlanner {
         return Set.of("", "start", "left", "center", "right", "end", "justify").contains(align);
     }
 
+    private static boolean supportedBorder(CssBorder border) {
+        if (border == null) return false;
+        if (!border.visible()) return border.sides().stream()
+            .allMatch(side -> Double.isFinite(side.widthPixels()) && side.widthPixels() >= 0);
+        if (!border.uniform()) return false;
+        CssBorder.Side side = border.top();
+        java.awt.Color color = CssColors.parse(side.color());
+        return Double.isFinite(side.widthPixels()) && side.widthPixels() > 0
+            && side.widthPixels() <= MAX_NATIVE_BORDER_PIXELS && "solid".equalsIgnoreCase(side.style())
+            && color != null && color.getAlpha() == 255;
+    }
+
     private static RenderItem toNative(PageBlock block, SlideSlice slice, int maxCells, int maxColumns,
                                        double minColumnPoints, Map<String, PageBlock> byId) {
         if (requiresLocalizedFallback(block, byId)) return null;
@@ -164,15 +180,15 @@ public final class EditableRenderPlanner {
                     list.marker(), block.style().textAlign(), block.style().lineHeight(), spans);
             }
             return new RenderItem.NativeText(toRect(block.bounds()), block.style().textAlign(), block.style().lineHeight(),
-                block.style().backgroundColor(), spans);
+                block.style().backgroundColor(), block.style().border(), spans);
         }
         if (block.type() == BlockType.TABLE) return nativeTable(block, slice, maxCells, maxColumns, minColumnPoints);
         AssetReference graphic = nativeGraphicAsset(block);
         if (graphic != null) return new RenderItem.NativeGraphic(toRect(block.bounds()), graphic);
         if (block.type() == BlockType.CONTAINER) {
             java.awt.Color background = CssColors.parse(block.style().backgroundColor());
-            if (background != null && background.getAlpha() == 255) {
-                return new RenderItem.NativeBackground(toRect(block.bounds()), block.style().backgroundColor());
+            if ((background != null && background.getAlpha() == 255) || block.style().border().visible()) {
+                return new RenderItem.NativeBackground(toRect(block.bounds()), block.style().backgroundColor(), block.style().border());
             }
             return null;
         }
@@ -334,8 +350,8 @@ public final class EditableRenderPlanner {
     }
     private static RenderItem withBounds(RenderItem item, RenderItem.Rect bounds) {
         return switch (item) {
-            case RenderItem.NativeText t -> new RenderItem.NativeText(bounds, t.textAlign(), t.lineHeightPixels(), t.backgroundColorCss(), t.spans());
-            case RenderItem.NativeBackground background -> new RenderItem.NativeBackground(bounds, background.colorCss());
+            case RenderItem.NativeText t -> new RenderItem.NativeText(bounds, t.textAlign(), t.lineHeightPixels(), t.backgroundColorCss(), t.border(), t.spans());
+            case RenderItem.NativeBackground background -> new RenderItem.NativeBackground(bounds, background.colorCss(), background.border());
             case RenderItem.NativeImage i -> new RenderItem.NativeImage(bounds, i.asset());
             case RenderItem.NativeGraphic g -> new RenderItem.NativeGraphic(bounds, g.asset());
             case RenderItem.NativeListItem l -> new RenderItem.NativeListItem(bounds, l.ordered(), l.start(), l.level(), l.marker(), l.textAlign(), l.lineHeightPixels(), l.spans());

@@ -4,6 +4,7 @@ import com.nicodim.ocapp.browser.BoundedByteArrayOutputStream;
 import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.pagemodel.AssetReference;
 import com.nicodim.ocapp.pagemodel.AuthoringHints;
+import com.nicodim.ocapp.pagemodel.CssBorder;
 import com.nicodim.ocapp.pagemodel.PageModel;
 import com.nicodim.ocapp.pagemodel.TableSemantics;
 import com.nicodim.ocapp.pagination.PaginationPlan;
@@ -80,7 +81,8 @@ public final class HybridPptxRenderer {
             show.setPageSize(new Dimension(slideWidth, slideHeight));
             var custom = show.getProperties().getCustomProperties();
             boolean hasAuthoringHints = false;
-            for (var block : model.blocks()) if (block.hints().keepTogether() || block.hints().breakBefore()
+            for (var block : model.blocks()) if (block.hints().recognizedAttributePresent()
+                || block.hints().keepTogether() || block.hints().breakBefore()
                 || !block.hints().title().isEmpty() || !block.hints().notes().isEmpty()
                 || !block.hints().layout().isEmpty() || block.hints().render() != AuthoringHints.Render.AUTO) {
                 hasAuthoringHints = true; break;
@@ -143,14 +145,12 @@ public final class HybridPptxRenderer {
 
     private static void addBackground(XSLFSlide slide, CssCoordinateMapper mapper, RenderItem.NativeBackground background) {
         Color parsed = CssColors.parse(background.colorCss());
-        if (parsed == null || parsed.getAlpha() != 255) throw new IllegalArgumentException("Background color is invalid");
-        Color color = new Color(parsed.getRed(), parsed.getGreen(), parsed.getBlue());
+        if (parsed == null || (parsed.getAlpha() != 0 && parsed.getAlpha() != 255)) throw new IllegalArgumentException("Background color is invalid");
         var shape = slide.createAutoShape();
         shape.setShapeType(ShapeType.RECT);
         shape.setAnchor(mapper.map(background.bounds()));
-        shape.setFillColor(color);
-        shape.setLineColor(color);
-        shape.setLineWidth(0);
+        shape.setFillColor(parsed.getAlpha() == 255 ? opaque(parsed) : null);
+        applyBorder(shape, background.border());
     }
 
     private void addCrop(XMLSlideShow show, XSLFSlide slide, CssCoordinateMapper mapper, BufferedImage screenshot,
@@ -173,6 +173,8 @@ public final class HybridPptxRenderer {
         box.setWordWrap(text.bounds().height() > text.lineHeightPixels() * 1.4);
         Color background = CssColors.parse(text.backgroundColorCss());
         if (background != null && background.getAlpha() > 0) box.setFillColor(new Color(background.getRed(), background.getGreen(), background.getBlue()));
+        else box.setFillColor(null);
+        applyBorder(box, text.border());
         box.clearText();
         XSLFTextParagraph paragraph = box.addNewTextParagraph();
         paragraph.setTextAlign(alignment(text.textAlign()));
@@ -277,6 +279,19 @@ public final class HybridPptxRenderer {
         Color color = CssColors.parse(border.color()); if (color != null) cell.setBorderColor(edge, opaque(color));
         if ("dashed".equalsIgnoreCase(border.style())) cell.setBorderDash(edge, StrokeStyle.LineDash.DASH);
         else if ("dotted".equalsIgnoreCase(border.style())) cell.setBorderDash(edge, StrokeStyle.LineDash.DOT);
+    }
+
+    private static void applyBorder(org.apache.poi.xslf.usermodel.XSLFAutoShape shape, CssBorder border) {
+        if (border == null || !border.visible()) {
+            shape.setLineWidth(0);
+            return;
+        }
+        CssBorder.Side side = border.top();
+        Color color = CssColors.parse(side.color());
+        if (!border.uniform() || !"solid".equalsIgnoreCase(side.style()) || color == null || color.getAlpha() != 255)
+            throw new IllegalArgumentException("CSS border is invalid");
+        shape.setLineColor(opaque(color));
+        shape.setLineWidth(side.widthPixels() * 72d / 96d);
     }
 
     private static AutoNumberingScheme numbering(String marker) {

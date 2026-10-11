@@ -85,8 +85,24 @@ class DomPageExtractorTest {
         assertThat(new TableSemantics.Cell(0,0,1,1,false,null).text()).isEmpty();
         assertThat(new AssetReference("a",AssetReference.Kind.OTHER,URI.create("urn:x"),null,0,false).mediaType()).isEmpty();
         assertThat(new ComputedStyle(null,null,null,null,null,null,null,1,400,null,null,1,1,0,false,false).display()).isEmpty();
+        assertThat(new CssBorder(null,null,null,null)).isEqualTo(CssBorder.none());
         assertThat(new PageBlock("a",BlockType.TEXT,"",null,0,0,0,new Bounds(0,0,1,1),null,null,null,
             styleRecord(),null,null,null,null,null,null,null).childIds()).isEmpty();
+    }
+
+    @Test void preservesRecognizedHintPresenceWhenBooleanValueNormalizesFalse(){
+        Map<String,Object> value=block("hint","TEXT","",0,0);
+        Map<String,Object> side=Map.of("width",2d,"color","rgb(1,2,3)","style","solid");
+        Map<String,Object> styled=new LinkedHashMap<>(style());styled.put("border",Map.of("top",side,"right",side,"bottom",side,"left",side));value.put("style",styled);
+        value.put("hints",Map.of("keepTogether",false,"slide","","title","","notes","",
+            "layout","","render","AUTO","present",true));
+        PageModel model=DomPageExtractor.fromScriptResult(result(List.of(value),List.of()),URI.create("https://x.test"),limits);
+        assertThat(model.blocks()).singleElement().satisfies(block -> {
+            assertThat(block.hints().keepTogether()).isFalse();
+            assertThat(block.hints().recognizedAttributePresent()).isTrue();
+            assertThat(block.style().border().top().widthPixels()).isEqualTo(2d);
+        });
+        assertThat(DomPageExtractor.SCRIPT).contains("data-pptx-ignore','data-pptx-keep-together","present=names.some");
     }
 
     @Test void rejectsScriptLimitsMalformedResultsAndInvalidGraphBeforePagination(){

@@ -9,6 +9,7 @@ import com.nicodim.ocapp.pagemodel.BlockType;
 import com.nicodim.ocapp.pagemodel.Bounds;
 import com.nicodim.ocapp.pagemodel.CaptureMetadata;
 import com.nicodim.ocapp.pagemodel.ComputedStyle;
+import com.nicodim.ocapp.pagemodel.CssBorder;
 import com.nicodim.ocapp.pagemodel.DocumentMetadata;
 import com.nicodim.ocapp.pagemodel.LinkReference;
 import com.nicodim.ocapp.pagemodel.PageBlock;
@@ -112,6 +113,23 @@ class EditableRenderPlannerTest {
         assertThat(CssColors.supported("transparent")).isTrue();
     }
 
+    @Test void keepsUniformOpaqueSolidBordersNativeAndFallsBackForComplexBorders() {
+        CssBorder.Side solid = new CssBorder.Side(2, "rgb(12, 34, 56)", "solid");
+        ComputedStyle nativeStyle = borderedStyle(new CssBorder(solid, solid, solid, solid), "rgb(240, 240, 240)");
+        PageBlock text = styledBlock("text", BlockType.TEXT, new Bounds(0, 0, 40, 12), nativeStyle, "bordered");
+        PageBlock container = styledBlock("box", BlockType.CONTAINER, new Bounds(45, 0, 40, 20), nativeStyle, "");
+        List<RenderItem> nativeItems = planner.plan(model(List.of(text, container)), slice(), 10);
+        assertThat(nativeItems).filteredOn(RenderItem.NativeText.class::isInstance).singleElement()
+            .extracting(item -> ((RenderItem.NativeText)item).border().top().widthPixels()).isEqualTo(2d);
+        assertThat(nativeItems).filteredOn(RenderItem.NativeBackground.class::isInstance).singleElement();
+
+        CssBorder.Side dashed = new CssBorder.Side(2, "rgb(12, 34, 56)", "dashed");
+        PageBlock complex = styledBlock("complex", BlockType.TEXT, new Bounds(0, 25, 40, 12),
+            borderedStyle(new CssBorder(dashed, dashed, dashed, dashed), "transparent"), "fallback");
+        assertThat(planner.plan(model(List.of(complex)), slice(), 10))
+            .containsExactly(new RenderItem.ScreenshotCrop(new RenderItem.Rect(0, 25, 40, 12)));
+    }
+
     @Test void renderRectValidatesEveryCoordinateAndProvidesGeometryOperations() {
         for (double[] value : List.of(new double[]{Double.NaN,0,1,1}, new double[]{0,Double.NaN,1,1},
             new double[]{0,0,Double.NaN,1}, new double[]{0,0,1,Double.NaN}, new double[]{0,0,0,1}, new double[]{0,0,1,0})) {
@@ -150,6 +168,17 @@ class EditableRenderPlannerTest {
     static ComputedStyle style() {
         return new ComputedStyle("block", "static", "visible", "visible", "rgb(10, 20, 30)",
             "transparent", "Arial", 16, 400, "normal", "left", 19.2, 1, 0, false, false);
+    }
+
+    private static ComputedStyle borderedStyle(CssBorder border, String background) {
+        return new ComputedStyle("block", "static", "visible", "visible", "rgb(10, 20, 30)",
+            background, "Arial", 16, 700, "italic", "center", 24, 1, 0, false, false, border);
+    }
+
+    private static PageBlock styledBlock(String id, BlockType type, Bounds bounds, ComputedStyle style, String text) {
+        List<TextRun> runs = text.isEmpty() ? List.of() : List.of(new TextRun(text, style));
+        return new PageBlock(id, type, "", List.of(), 0, 0, 0, bounds, null, TransformSummary.none(), List.of(),
+            style, runs, List.of(), null, null, List.of(), AuthoringHints.none(), List.of());
     }
 
     static PageBlock block(String id, BlockType type, String parent, List<String> children, Bounds bounds,

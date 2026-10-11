@@ -91,6 +91,7 @@ class RealBrowserE2EIT {
         fixture.createContext("/m3-mixed", this::m3MixedFixture);
         fixture.createContext("/m5-graphics", this::m5GraphicsFixture);
         fixture.createContext("/m6-hints", this::m6HintsFixture);
+        fixture.createContext("/acceptance-0.4", this::acceptance04Fixture);
         fixture.createContext("/m5-pixel.png", this::m5Pixel);
         fixture.start();
         fixtureBase = "http://localhost:" + fixture.getAddress().getPort();
@@ -228,10 +229,9 @@ class RealBrowserE2EIT {
                 }));
             assertThat(pictures.stream()
                 .filter(shape -> shape.getPictureData().getType() == org.apache.poi.sl.usermodel.PictureData.PictureType.PNG)
-                .toList()).allSatisfy(shape -> {
-                    assertThat(shape.getAnchor().getWidth()).isLessThan(150);
-                    assertThat(shape.getAnchor().getHeight()).isLessThan(100);
-                }).isNotEmpty();
+                .toList()).isNotEmpty().allSatisfy(shape ->
+                    assertThat(shape.getAnchor().getWidth() * shape.getAnchor().getHeight())
+                        .isLessThan(show.getPageSize().getWidth() * show.getPageSize().getHeight()));
         }
 
         String artifactSetting = configured("ocapp.e2e.artifactsDir", "OCAPP_E2E_ARTIFACTS_DIR");
@@ -389,6 +389,44 @@ class RealBrowserE2EIT {
         }
     }
 
+    @Test void extractsSupportedAndComplexBordersAndFalseOnlyHintsThroughRealChromium() throws Exception {
+        BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
+        ConverterProperties properties = application.getBean(ConverterProperties.class);
+        URI source = URI.create(fixtureBase + "/acceptance-0.4");
+        try (BrowserSession session = browserFactory.open()) {
+            session.driver().get(source.toASCIIString());
+            PageModel model = new DomPageExtractor(properties.getPageModel(), properties.getPptx()).extract(session.driver(), source);
+            PageBlock supported = model.blocks().stream().filter(block -> block.textRuns().stream()
+                .anyMatch(run -> run.text().equals("supported border"))).findFirst().orElseThrow();
+            assertThat(supported.style().border().uniform()).isTrue();
+            assertThat(supported.style().border().top().widthPixels()).isEqualTo(4d);
+            assertThat(supported.style().border().top().style()).isEqualTo("solid");
+            PageBlock complex = model.blocks().stream().filter(block -> block.textRuns().stream()
+                .anyMatch(run -> run.text().equals("complex border"))).findFirst().orElseThrow();
+            assertThat(complex.style().border().top().style()).isEqualTo("dashed");
+            assertThat(model.blocks()).filteredOn(block -> block.textRuns().stream()
+                .anyMatch(run -> run.text().startsWith("false-only"))).hasSize(2)
+                .allSatisfy(block -> {
+                    assertThat(block.hints().recognizedAttributePresent()).isTrue();
+                    assertThat(block.hints().keepTogether()).isFalse();
+                });
+        }
+        Response response = post("/MakePPTX", source.toString());
+        assertThat(response.status()).isEqualTo(200);
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(response.body()))) {
+            assertThat(show.getSlides()).hasSize(1);
+            assertThat(show.getProperties().getCustomProperties().getProperty("ocapp.authoring-hints.contract").getLpwstr())
+                .isEqualTo("1");
+            assertThat(show.getSlides().getFirst().getShapes()).filteredOn(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
+                .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast).anySatisfy(shape -> {
+                    assertThat(shape.getText()).isEqualTo("supported border");
+                    assertThat(shape.getLineWidth()).isEqualTo(3d);
+                    assertThat(shape.getXmlObject().toString()).containsIgnoringCase("17365D");
+                }).noneMatch(shape -> shape.getText().equals("complex border"));
+            assertThat(show.getSlides().getFirst().getShapes()).anyMatch(XSLFPictureShape.class::isInstance);
+        }
+    }
+
     @Test void rendersM6HintDeckThroughConfiguredLibreOffice() throws Exception {
         String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
         assumeTrue(!executable.isBlank(), "External-office smoke is opt-in; set -Docapp.e2e.libreoffice=/path/to/soffice");
@@ -416,9 +454,17 @@ class RealBrowserE2EIT {
                 String text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ");
                 assertThat(occurrences(text, "M6 first title")).isEqualTo(1);
                 assertThat(occurrences(text, "M6 second title")).isEqualTo(1);
-                BufferedImage first = new PDFRenderer(document).renderImageWithDPI(0, 144);
+                PDFRenderer renderer = new PDFRenderer(document);
+                BufferedImage first = renderer.renderImageWithDPI(0, 144);
                 assertThat(containsRenderedColor(first, c -> c.getRed() > 150 && c.getGreen() < 100 && c.getBlue() < 100))
                     .as("forced localized red image is visible").isTrue();
+                for (int page = 0; page < document.getNumberOfPages(); page++) {
+                    BufferedImage image = page == 0 ? first : renderer.renderImageWithDPI(page, 144);
+                    assertThat(image.getWidth()).isBetween(1000, 4000);
+                    assertThat(image.getHeight()).isBetween(500, 3000);
+                    if (retainArtifacts) assertThat(ImageIO.write(image, "png",
+                        work.resolve("m6-hints-page-" + (page + 1) + ".png").toFile())).isTrue();
+                }
             }
         } finally {
             deleteTree(profile);
@@ -676,6 +722,22 @@ class RealBrowserE2EIT {
                 data-pptx-keep-together='secret-value' data-pptx-notes=' ' data-pptx-layout='secret-value'>invalid hints</b>
               <div id='render-ready'>ready</div>
             </section></body></html>
+            """);
+    }
+
+    private void acceptance04Fixture(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        sendHtml(exchange, """
+            <!doctype html><html><head><style>
+            html,body{margin:0;width:960px;height:540px;background:white;font:24px/32px Arial,sans-serif}
+            p,div{position:absolute;margin:0;padding:0}.supported{left:40px;top:40px;width:300px;height:64px;
+              border:4px solid rgb(23,54,93);background:rgb(232,240,250);font-weight:700;font-style:italic;text-align:center}
+            .complex{left:40px;top:150px;width:300px;height:64px;border:4px dashed rgb(180,40,50);background:rgb(255,240,240)}
+            .false-ignore{left:40px;top:270px}.false-keep{left:40px;top:320px}
+            </style></head><body><p class='supported'>supported border</p><p class='complex'>complex border</p>
+            <div class='false-ignore' data-pptx-ignore='false'>false-only ignore</div>
+            <div class='false-keep' data-pptx-keep-together='false'>false-only keep</div>
+            <span id='render-ready' style='position:absolute;left:0;top:500px'>ready</span></body></html>
             """);
     }
 

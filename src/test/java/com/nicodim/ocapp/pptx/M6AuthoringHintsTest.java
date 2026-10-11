@@ -132,6 +132,20 @@ class M6AuthoringHintsTest {
         }
     }
 
+    @Test void falseOnlyRecognizedBooleanHintStillWritesContractMetadata() throws Exception {
+        AuthoringHints falseOnly = new AuthoringHints(false, "", "", "", "", AuthoringHints.Render.AUTO, true);
+        PageModel page = model(100, 50, List.of(block("false-only", 0, new Bounds(0, 0, 40, 10),
+            falseOnly, false, "unchanged")));
+        ConverterProperties properties = new ConverterProperties();
+        properties.getPptx().setSlideWidthInches(10); properties.getPptx().setSlideHeightInches(5);
+        byte[] bytes = new HybridPptxRenderer(properties).render(new BufferedImage(100, 50, BufferedImage.TYPE_INT_RGB),
+            page, new PaginationPlan(100, 50, List.of(slice()), List.of()));
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
+            assertThat(show.getProperties().getCustomProperties().getProperty("ocapp.authoring-hints.contract").getLpwstr())
+                .isEqualTo("1");
+        }
+    }
+
     @Test void validatorRejectsUnnormalizedHintValuesWithStableContentFreeError() {
         PageModel bad = model(100, 50, List.of(block("bad", 0, new Bounds(0, 0, 40, 10),
             hints(false, "new-slide", "", "", "template-secret", AuthoringHints.Render.AUTO), false, "bad")));

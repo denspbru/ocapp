@@ -3,7 +3,8 @@ package com.nicodim.ocapp.pagemodel;
 import java.util.Set;
 
 /** Normalized OCApp authoring-hints contract v1. Invalid source values never reach this value type. */
-public record AuthoringHints(boolean keepTogether, String slide, String title, String notes, String layout, Render render) {
+public record AuthoringHints(boolean keepTogether, String slide, String title, String notes, String layout, Render render,
+                             boolean recognizedAttributePresent) {
     public static final String CONTRACT_VERSION = "1";
     public static final String BREAK_BEFORE = "break-before";
     public static final Set<String> LAYOUTS = Set.of("", "blank", "title-only");
@@ -17,9 +18,12 @@ public record AuthoringHints(boolean keepTogether, String slide, String title, S
         layout = safe(layout);
         render = render == null ? Render.AUTO : render;
     }
+    public AuthoringHints(boolean keepTogether, String slide, String title, String notes, String layout, Render render) {
+        this(keepTogether, slide, title, notes, layout, render, false);
+    }
 
     public boolean breakBefore() { return BREAK_BEFORE.equals(slide); }
 
     private static String safe(String value) { return value == null ? "" : value; }
-    public static AuthoringHints none() { return new AuthoringHints(false, "", "", "", "", Render.AUTO); }
+    public static AuthoringHints none() { return new AuthoringHints(false, "", "", "", "", Render.AUTO, false); }
 }

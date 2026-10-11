@@ -10,6 +10,7 @@ import com.nicodim.ocapp.pagemodel.AuthoringHints;
 import com.nicodim.ocapp.pagemodel.BlockType;
 import com.nicodim.ocapp.pagemodel.Bounds;
 import com.nicodim.ocapp.pagemodel.ComputedStyle;
+import com.nicodim.ocapp.pagemodel.CssBorder;
 import com.nicodim.ocapp.pagemodel.LinkReference;
 import com.nicodim.ocapp.pagemodel.PageBlock;
 import com.nicodim.ocapp.pagemodel.TextRun;
@@ -45,9 +46,14 @@ class HybridPptxRendererTest {
         AssetReference image = new AssetReference("asset", AssetReference.Kind.IMAGE,
             URI.create("data:image/png;base64," + Base64.getEncoder().encodeToString(imageBytes)),
             "image/png", imageBytes.length, true);
-        PageBlock text = block("text", BlockType.TEXT, "", List.of(), new Bounds(5, 3, 45, 12),
-            List.of(new TextRun("Open link", style())),
-            List.of(new LinkReference("Open link", URI.create("https://example.org/path?q=1"))), List.of(), false, List.of());
+        CssBorder.Side borderSide = new CssBorder.Side(2, "rgb(18, 52, 86)", "solid");
+        ComputedStyle textStyle = new ComputedStyle("block", "static", "visible", "visible", "rgb(10, 20, 30)",
+            "rgb(250, 245, 230)", "Arial", 16, 700, "italic", "center", 24, 1, 0, false, false,
+            new CssBorder(borderSide, borderSide, borderSide, borderSide));
+        PageBlock text = new PageBlock("text", BlockType.TEXT, "", List.of(), 0, 0, 0, new Bounds(5, 3, 45, 12),
+            null, TransformSummary.none(), List.of(), textStyle, List.of(new TextRun("Open link", textStyle)),
+            List.of(new LinkReference("Open link", URI.create("https://example.org/path?q=1"))), null, null, List.of(),
+            AuthoringHints.none(), List.of());
         PageBlock picture = block("image", BlockType.IMAGE, "", List.of(), new Bounds(60, 3, 20, 20),
             List.of(), List.of(), List.of(image), false, List.of());
         PageBlock table = block("table", BlockType.TABLE, "", List.of(), new Bounds(10, 28, 30, 15),
@@ -74,10 +80,21 @@ class HybridPptxRendererTest {
             assertThat(run.getRawText()).isEqualTo("Open link");
             assertThat(run.getFontFamily()).isEqualTo("Arial");
             assertThat(run.getFontSize()).isEqualTo(12d);
+            assertThat(run.isBold()).isTrue();
+            assertThat(run.isItalic()).isTrue();
             assertThat(run.getXmlObject().toString()).containsIgnoringCase("0A141E");
             assertThat(run.getHyperlink()).isNotNull();
             assertThat(run.getHyperlink().getAddress()).isEqualTo("https://example.org/path?q=1");
             assertThat(textShape.getWordWrap()).isFalse();
+            assertThat(textShape.getTextParagraphs().getFirst().getTextAlign())
+                .isEqualTo(org.apache.poi.sl.usermodel.TextParagraph.TextAlign.CENTER);
+            assertThat(textShape.getTextParagraphs().getFirst().getLineSpacing()).isEqualTo(150d);
+            assertThat(textShape.getLineWidth()).isEqualTo(1.5d);
+            assertThat(textShape.getXmlObject().toString()).containsIgnoringCase("123456");
+            assertThat(textShape.getAnchor().getX()).isCloseTo(36d, org.assertj.core.data.Offset.offset(.01));
+            assertThat(textShape.getAnchor().getY()).isCloseTo(21.6d, org.assertj.core.data.Offset.offset(.01));
+            assertThat(textShape.getAnchor().getWidth()).isCloseTo(324d, org.assertj.core.data.Offset.offset(.01));
+            assertThat(textShape.getAnchor().getHeight()).isCloseTo(86.4d, org.assertj.core.data.Offset.offset(.01));
             assertThat(show.getSlides().getFirst().getShapes()).filteredOn(XSLFTextBox.class::isInstance)
                 .map(XSLFTextShape.class::cast).filteredOn(shape -> shape.getText().contains("line two"))
                 .singleElement().satisfies(shape -> assertThat(shape.getWordWrap()).isTrue());
