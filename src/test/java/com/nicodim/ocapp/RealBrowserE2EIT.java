@@ -402,6 +402,8 @@ class RealBrowserE2EIT {
                 boolean retained = model.blocks().stream().flatMap(block -> block.textRuns().stream())
                     .anyMatch(run -> run.text().contains("case target"));
                 assertThat(retained).isEqualTo(!name.equals("active-ignore"));
+                if (name.equals("active-ignore")) assertThat(session.driver().executeScript(
+                    "return getComputedStyle(document.querySelector('div')).display")).isEqualTo("none");
                 long invalid = model.warnings().stream().filter(warning -> warning.code().equals("PPTX_HINT_INVALID")
                     && warning.detail().equals("data-pptx-ignore")).count();
                 assertThat(invalid).isEqualTo(name.equals("invalid-ignore") ? 1 : 0);
