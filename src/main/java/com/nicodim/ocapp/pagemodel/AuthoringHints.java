@@ -19,10 +19,16 @@ public record AuthoringHints(boolean keepTogether, String slide, String title, S
         render = render == null ? Render.AUTO : render;
     }
     public AuthoringHints(boolean keepTogether, String slide, String title, String notes, String layout, Render render) {
-        this(keepTogether, slide, title, notes, layout, render, false);
+        this(keepTogether, slide, title, notes, layout, render,
+            keepTogether || !safe(slide).isEmpty() || !safe(title).isEmpty() || !safe(notes).isEmpty()
+                || !safe(layout).isEmpty() || render != null && render != Render.AUTO);
     }
 
     public boolean breakBefore() { return BREAK_BEFORE.equals(slide); }
+    public boolean hasRecognizedAttribute() {
+        return recognizedAttributePresent || keepTogether || !slide.isEmpty() || !title.isEmpty() || !notes.isEmpty()
+            || !layout.isEmpty() || render != Render.AUTO;
+    }
 
     private static String safe(String value) { return value == null ? "" : value; }
     public static AuthoringHints none() { return new AuthoringHints(false, "", "", "", "", Render.AUTO, false); }

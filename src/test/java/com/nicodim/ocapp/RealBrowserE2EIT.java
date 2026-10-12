@@ -92,6 +92,7 @@ class RealBrowserE2EIT {
         fixture.createContext("/m5-graphics", this::m5GraphicsFixture);
         fixture.createContext("/m6-hints", this::m6HintsFixture);
         fixture.createContext("/acceptance-0.4", this::acceptance04Fixture);
+        fixture.createContext("/hint-case/", this::hintCaseFixture);
         fixture.createContext("/m5-pixel.png", this::m5Pixel);
         fixture.start();
         fixtureBase = "http://localhost:" + fixture.getAddress().getPort();
@@ -389,6 +390,25 @@ class RealBrowserE2EIT {
         }
     }
 
+    @Test void preservesPageHintPresenceForPrunedInvalidFalseAndAbsentCasesThroughRealChromium() throws Exception {
+        BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
+        ConverterProperties properties = application.getBean(ConverterProperties.class);
+        try (BrowserSession session = browserFactory.open()) {
+            for (String name : List.of("active-ignore", "invalid-ignore", "false-ignore", "no-hint")) {
+                URI source = URI.create(fixtureBase + "/hint-case/" + name);
+                session.driver().get(source.toASCIIString());
+                PageModel model = new DomPageExtractor(properties.getPageModel(), properties.getPptx()).extract(session.driver(), source);
+                assertThat(model.recognizedAttributePresent()).isEqualTo(!name.equals("no-hint"));
+                boolean retained = model.blocks().stream().flatMap(block -> block.textRuns().stream())
+                    .anyMatch(run -> run.text().contains("case target"));
+                assertThat(retained).isEqualTo(!name.equals("active-ignore"));
+                long invalid = model.warnings().stream().filter(warning -> warning.code().equals("PPTX_HINT_INVALID")
+                    && warning.detail().equals("data-pptx-ignore")).count();
+                assertThat(invalid).isEqualTo(name.equals("invalid-ignore") ? 1 : 0);
+            }
+        }
+    }
+
     @Test void extractsSupportedAndComplexBordersAndFalseOnlyHintsThroughRealChromium() throws Exception {
         BrowserFactory browserFactory = application.getBean(BrowserFactory.class);
         ConverterProperties properties = application.getBean(ConverterProperties.class);
@@ -420,7 +440,7 @@ class RealBrowserE2EIT {
             assertThat(show.getSlides().getFirst().getShapes()).filteredOn(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
                 .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast).anySatisfy(shape -> {
                     assertThat(shape.getText()).isEqualTo("supported border");
-                    assertThat(shape.getLineWidth()).isEqualTo(3d);
+                    assertThat(shape.getLineWidth()).isCloseTo(2.6667d, org.assertj.core.data.Offset.offset(.001));
                     assertThat(shape.getXmlObject().toString()).containsIgnoringCase("17365D");
                 }).noneMatch(shape -> shape.getText().equals("complex border"));
             assertThat(show.getSlides().getFirst().getShapes()).anyMatch(XSLFPictureShape.class::isInstance);
@@ -723,6 +743,20 @@ class RealBrowserE2EIT {
               <div id='render-ready'>ready</div>
             </section></body></html>
             """);
+    }
+
+    private void hintCaseFixture(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        String name = exchange.getRequestURI().getPath().substring("/hint-case/".length());
+        String attribute = switch (name) {
+            case "active-ignore" -> " data-pptx-ignore";
+            case "invalid-ignore" -> " data-pptx-ignore='invalid'";
+            case "false-ignore" -> " data-pptx-ignore='false'";
+            case "no-hint" -> "";
+            default -> throw new IllegalArgumentException("Unknown hint fixture");
+        };
+        sendHtml(exchange, "<!doctype html><html><body><div" + attribute
+            + ">case target</div><span id='render-ready'>ready</span></body></html>");
     }
 
     private void acceptance04Fixture(HttpExchange exchange) throws IOException {

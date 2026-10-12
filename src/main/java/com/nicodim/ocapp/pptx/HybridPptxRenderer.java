@@ -80,13 +80,7 @@ public final class HybridPptxRenderer {
             int slideHeight = (int) Math.round(ppt.getSlideHeightInches() * 72);
             show.setPageSize(new Dimension(slideWidth, slideHeight));
             var custom = show.getProperties().getCustomProperties();
-            boolean hasAuthoringHints = false;
-            for (var block : model.blocks()) if (block.hints().recognizedAttributePresent()
-                || block.hints().keepTogether() || block.hints().breakBefore()
-                || !block.hints().title().isEmpty() || !block.hints().notes().isEmpty()
-                || !block.hints().layout().isEmpty() || block.hints().render() != AuthoringHints.Render.AUTO) {
-                hasAuthoringHints = true; break;
-            }
+            boolean hasAuthoringHints = model.recognizedAttributePresent();
             if (!hasAuthoringHints) for (var warning : model.warnings()) if (warning.code().startsWith("PPTX_HINT_")) {
                 hasAuthoringHints = true; break;
             }
@@ -150,7 +144,7 @@ public final class HybridPptxRenderer {
         shape.setShapeType(ShapeType.RECT);
         shape.setAnchor(mapper.map(background.bounds()));
         shape.setFillColor(parsed.getAlpha() == 255 ? opaque(parsed) : null);
-        applyBorder(shape, background.border());
+        applyBorder(shape, background.border(), mapper.pointsPerCssPixel());
     }
 
     private void addCrop(XMLSlideShow show, XSLFSlide slide, CssCoordinateMapper mapper, BufferedImage screenshot,
@@ -174,7 +168,7 @@ public final class HybridPptxRenderer {
         Color background = CssColors.parse(text.backgroundColorCss());
         if (background != null && background.getAlpha() > 0) box.setFillColor(new Color(background.getRed(), background.getGreen(), background.getBlue()));
         else box.setFillColor(null);
-        applyBorder(box, text.border());
+        applyBorder(box, text.border(), mapper.pointsPerCssPixel());
         box.clearText();
         XSLFTextParagraph paragraph = box.addNewTextParagraph();
         paragraph.setTextAlign(alignment(text.textAlign()));
@@ -251,8 +245,10 @@ public final class HybridPptxRenderer {
                 run.setBold(source.fontWeight() >= 600); Color color = CssColors.parse(source.textColor());
                 if (color != null) run.setFontColor(opaque(color));
             }
-            applyBorder(cell, BorderEdge.top, source.top()); applyBorder(cell, BorderEdge.right, source.right());
-            applyBorder(cell, BorderEdge.bottom, source.bottom()); applyBorder(cell, BorderEdge.left, source.left());
+            applyBorder(cell, BorderEdge.top, source.top(), mapper.pointsPerCssPixel());
+            applyBorder(cell, BorderEdge.right, source.right(), mapper.pointsPerCssPixel());
+            applyBorder(cell, BorderEdge.bottom, source.bottom(), mapper.pointsPerCssPixel());
+            applyBorder(cell, BorderEdge.left, source.left(), mapper.pointsPerCssPixel());
             if (source.rowSpan() > 1 || source.columnSpan() > 1)
                 table.mergeCells(row, row + source.rowSpan() - 1, source.column(), source.column() + source.columnSpan() - 1);
         }
@@ -271,17 +267,17 @@ public final class HybridPptxRenderer {
         }
     }
 
-    private static void applyBorder(XSLFTableCell cell, BorderEdge edge, TableSemantics.Border border) {
+    private static void applyBorder(XSLFTableCell cell, BorderEdge edge, TableSemantics.Border border, double pointsPerCssPixel) {
         if (border.widthPixels() <= 0 || "none".equalsIgnoreCase(border.style()) || "hidden".equalsIgnoreCase(border.style())) {
             cell.removeBorder(edge); return;
         }
-        cell.setBorderWidth(edge, border.widthPixels() * 72d / 96d);
+        cell.setBorderWidth(edge, border.widthPixels() * pointsPerCssPixel);
         Color color = CssColors.parse(border.color()); if (color != null) cell.setBorderColor(edge, opaque(color));
         if ("dashed".equalsIgnoreCase(border.style())) cell.setBorderDash(edge, StrokeStyle.LineDash.DASH);
         else if ("dotted".equalsIgnoreCase(border.style())) cell.setBorderDash(edge, StrokeStyle.LineDash.DOT);
     }
 
-    private static void applyBorder(org.apache.poi.xslf.usermodel.XSLFAutoShape shape, CssBorder border) {
+    private static void applyBorder(org.apache.poi.xslf.usermodel.XSLFAutoShape shape, CssBorder border, double pointsPerCssPixel) {
         if (border == null || !border.visible()) {
             shape.setLineWidth(0);
             return;
@@ -291,7 +287,7 @@ public final class HybridPptxRenderer {
         if (!border.uniform() || !"solid".equalsIgnoreCase(side.style()) || color == null || color.getAlpha() != 255)
             throw new IllegalArgumentException("CSS border is invalid");
         shape.setLineColor(opaque(color));
-        shape.setLineWidth(side.widthPixels() * 72d / 96d);
+        shape.setLineWidth(side.widthPixels() * pointsPerCssPixel);
     }
 
     private static AutoNumberingScheme numbering(String marker) {

@@ -42,6 +42,15 @@ class M6AuthoringHintsTest {
         assertThat(AuthoringHints.CONTRACT_VERSION).isEqualTo("1");
     }
 
+    @Test void legacyConstructorsInferActiveHintsButKeepNeutralPagesUnhinted() {
+        assertThat(new AuthoringHints(true,"","","","",AuthoringHints.Render.AUTO).hasRecognizedAttribute()).isTrue();
+        assertThat(new AuthoringHints(false,"","title","","",AuthoringHints.Render.AUTO).hasRecognizedAttribute()).isTrue();
+        assertThat(AuthoringHints.none().hasRecognizedAttribute()).isFalse();
+        assertThat(model(100,50,List.of(block("active",0,new Bounds(0,0,20,10),
+            new AuthoringHints(true,"","","","",AuthoringHints.Render.AUTO),false,"x"))).recognizedAttributePresent()).isTrue();
+        assertThat(model(100,50,List.of(block("none",0,new Bounds(0,0,20,10),AuthoringHints.none(),false,"x"))).recognizedAttributePresent()).isFalse();
+    }
+
     @Test void slideAndKeepTogetherOverrideHeuristicsDeterministically() {
         PageModel page = model(100, 220, List.of(
             block("a", 0, new Bounds(0, 0, 100, 80), hints(false, "", "", "", "", AuthoringHints.Render.AUTO), false, "a"),

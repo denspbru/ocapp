@@ -93,7 +93,7 @@ public final class PageModelValidator {
         for(TableSemantics.Cell c:t.cells()){
             if(c==null||c.row()<0||c.column()<0||c.rowSpan()<1||c.columnSpan()<1||c.row()+c.rowSpan()>t.rows()||c.column()+c.columnSpan()>t.columns()||!Double.isFinite(c.fontSize())||c.fontSize()<=0||c.fontWeight()<1||c.fontWeight()>1000)throw invalid("Page model table cell is invalid");
             for(String value:List.of(c.fillColor(),c.textColor(),c.fontFamily(),c.textAlign(),c.verticalAlign()))metadata=plusField(metadata,value,l);
-            for(TableSemantics.Border border:List.of(c.top(),c.right(),c.bottom(),c.left())){if(border==null||!Double.isFinite(border.widthPixels())||border.widthPixels()<0)throw invalid("Page model table border is invalid");metadata=plusField(metadata,border.color(),l);metadata=plusField(metadata,border.style(),l);}
+            for(TableSemantics.Border border:List.of(c.top(),c.right(),c.bottom(),c.left())){if(border==null||!Double.isFinite(border.widthPixels())||border.widthPixels()<0||border.widthPixels()>l.getMaxCoordinate())throw invalid("Page model table border is invalid");metadata=plusField(metadata,border.color(),l);metadata=plusField(metadata,border.style(),l);}
             for(int r=c.row();r<c.row()+c.rowSpan();r++)for(int col=c.column();col<c.column()+c.columnSpan();col++)if(!occupied.add(r+":"+col))throw invalid("Page model table cells overlap");
         }
         return metadata;

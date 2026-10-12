@@ -97,12 +97,47 @@ class DomPageExtractorTest {
         value.put("hints",Map.of("keepTogether",false,"slide","","title","","notes","",
             "layout","","render","AUTO","present",true));
         PageModel model=DomPageExtractor.fromScriptResult(result(List.of(value),List.of()),URI.create("https://x.test"),limits);
+        assertThat(model.recognizedAttributePresent()).isTrue();
         assertThat(model.blocks()).singleElement().satisfies(block -> {
             assertThat(block.hints().keepTogether()).isFalse();
             assertThat(block.hints().recognizedAttributePresent()).isTrue();
             assertThat(block.style().border().top().widthPixels()).isEqualTo(2d);
         });
-        assertThat(DomPageExtractor.SCRIPT).contains("data-pptx-ignore','data-pptx-keep-together","present=names.some");
+        assertThat(DomPageExtractor.SCRIPT).contains("data-pptx-ignore','data-pptx-keep-together", "hintAttributes(e)",
+            "const present=Object.keys(values).length>0", "recognizedAttributePresent=hintNames.some");
+    }
+
+    @Test void infersPageHintPresenceForLegacyBrowserShapesAndDistinguishesNoHintDiagnostics(){
+        Map<String,Object> falseOnly=block("hint","TEXT","",0,0);
+        falseOnly.put("hints",Map.of("keepTogether",false,"slide","","title","","notes","","layout","","render","AUTO","present",true));
+        PageModel fromBlock=DomPageExtractor.fromScriptResult(result(List.of(falseOnly),List.of()),URI.create("https://x.test"),limits);
+        assertThat(fromBlock.recognizedAttributePresent()).isTrue();
+        assertThat(PageModelDiagnostics.safeCanonicalJson(fromBlock)).contains("\"recognizedAttributePresent\":true","\"present\":true");
+
+        Map<String,Object> invalidOnly=result(List.of(block("plain","TEXT","",0,0)),List.of());
+        invalidOnly.put("warnings",List.of(Map.of("code","PPTX_HINT_INVALID","blockId","","detail","data-pptx-ignore")));
+        assertThat(DomPageExtractor.fromScriptResult(invalidOnly,URI.create("https://x.test"),limits).recognizedAttributePresent()).isTrue();
+
+        PageModel none=DomPageExtractor.fromScriptResult(result(List.of(block("plain","TEXT","",0,0)),List.of()),URI.create("https://x.test"),limits);
+        assertThat(none.recognizedAttributePresent()).isFalse();
+        assertThat(PageModelDiagnostics.safeCanonicalJson(none)).contains("\"recognizedAttributePresent\":false","\"present\":false");
+    }
+
+    @Test void validatesCssAndTableBorderWidthsAtConfiguredMaximum(){
+        limits.setMaxCoordinate(100);
+        Map<String,Object> exact=block("a","TEXT","",0,0); exact.put("style",styleWithBorder(100d));
+        assertThat(DomPageExtractor.fromScriptResult(result(List.of(exact),List.of()),URI.create("https://x.test"),limits).blocks()).hasSize(1);
+        for(double width:List.of(Math.nextUp(100d),Double.NaN,Double.POSITIVE_INFINITY,-1d)){
+            Map<String,Object> bad=block("a","TEXT","",0,0); bad.put("style",styleWithBorder(width));
+            assertCode(()->DomPageExtractor.fromScriptResult(result(List.of(bad),List.of()),URI.create("https://x.test"),limits),"PAGEMODEL_INVALID");
+        }
+        Map<String,Object> table=block("a","TABLE","",0,0);
+        table.put("table",Map.of("rows",1,"columns",1,"cells",List.of(cellWithBorder(Math.nextUp(100d)))));
+        assertCode(()->DomPageExtractor.fromScriptResult(result(List.of(table),List.of()),URI.create("https://x.test"),limits),"PAGEMODEL_INVALID");
+        Map<String,Object> malformed=block("a","TEXT","",0,0); Map<String,Object> malformedStyle=new LinkedHashMap<>(style());
+        malformedStyle.put("border",Map.of("top",Map.of("width","wide","color","black","style","solid")));
+        malformed.put("style",malformedStyle);
+        assertCode(()->DomPageExtractor.fromScriptResult(result(List.of(malformed),List.of()),URI.create("https://x.test"),limits),"PAGEMODEL_EXTRACTION_FAILED");
     }
 
     @Test void rejectsScriptLimitsMalformedResultsAndInvalidGraphBeforePagination(){
@@ -190,6 +225,8 @@ class DomPageExtractorTest {
     private static Map<String,Object> block(String id,String type,String parent,int depth,int order){Map<String,Object>b=new LinkedHashMap<>();b.put("id",id);b.put("type",type);b.put("parentId",parent);b.put("children",List.of());b.put("depth",depth);b.put("domOrder",order);b.put("visualOrder",order);b.put("bounds",bounds());b.put("clip",null);b.put("transform",Map.of("transformed",false,"matrix","none","rotation",0d,"scaleX",1d,"scaleY",1d));b.put("overlaps",List.of());b.put("style",style());b.put("textRuns",List.of());b.put("links",List.of());b.put("list",null);b.put("table",null);b.put("assets",List.of());b.put("hints",Map.of("keepTogether",false,"slide","","title","","notes","","layout","","render","AUTO"));b.put("warnings",List.of());return b;}
     private static Map<String,Object> bounds(){return Map.of("x",0d,"y",0d,"width",10d,"height",10d);}
     private static Map<String,Object> style(){return Map.ofEntries(Map.entry("display","block"),Map.entry("position","static"),Map.entry("overflowX","visible"),Map.entry("overflowY","visible"),Map.entry("color","rgb(0,0,0)"),Map.entry("backgroundColor","transparent"),Map.entry("fontFamily","sans"),Map.entry("fontSize",16d),Map.entry("fontWeight",400),Map.entry("fontStyle","normal"),Map.entry("textAlign","start"),Map.entry("lineHeight",19.2d),Map.entry("opacity",1d),Map.entry("zIndex",0),Map.entry("flex",false),Map.entry("grid",false));}
+    private static Map<String,Object> styleWithBorder(double width){Map<String,Object>s=new LinkedHashMap<>(style());Map<String,Object>side=Map.of("width",width,"color","black","style","solid");s.put("border",Map.of("top",side,"right",side,"bottom",side,"left",side));return s;}
+    private static Map<String,Object> cellWithBorder(double width){Map<String,Object>side=Map.of("width",width,"color","black","style","solid");Map<String,Object>c=new LinkedHashMap<>();c.put("row",0);c.put("column",0);c.put("rowSpan",1);c.put("columnSpan",1);c.put("header",false);c.put("text","x");c.put("top",side);c.put("right",side);c.put("bottom",side);c.put("left",side);return c;}
     private static Map<String,Object> asset(String id,String kind,String uri,long bytes,boolean embedded){return Map.of("id",id,"kind",kind,"uri",uri,"mediaType","image/png","bytes",bytes,"embedded",embedded);}
     private static Map<String,Object> cell(int col){return Map.of("row",0,"column",col,"rowSpan",1,"columnSpan",1,"header",false,"text","x");}
     private static ComputedStyle styleRecord(){return new ComputedStyle("block","static","visible","visible","black","transparent","sans",16,400,"normal","start",19,1,0,false,false);}

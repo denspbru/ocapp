@@ -89,7 +89,7 @@ class HybridPptxRendererTest {
             assertThat(textShape.getTextParagraphs().getFirst().getTextAlign())
                 .isEqualTo(org.apache.poi.sl.usermodel.TextParagraph.TextAlign.CENTER);
             assertThat(textShape.getTextParagraphs().getFirst().getLineSpacing()).isEqualTo(150d);
-            assertThat(textShape.getLineWidth()).isEqualTo(1.5d);
+            assertThat(textShape.getLineWidth()).isCloseTo(14.4d, org.assertj.core.data.Offset.offset(.01));
             assertThat(textShape.getXmlObject().toString()).containsIgnoringCase("123456");
             assertThat(textShape.getAnchor().getX()).isCloseTo(36d, org.assertj.core.data.Offset.offset(.01));
             assertThat(textShape.getAnchor().getY()).isCloseTo(21.6d, org.assertj.core.data.Offset.offset(.01));
@@ -109,6 +109,38 @@ class HybridPptxRendererTest {
             BufferedImage crop = ImageIO.read(new ByteArrayInputStream(fallback.getPictureData().getData()));
             assertThat(crop.getWidth()).isEqualTo(60);
             assertThat(crop.getHeight()).isEqualTo(30);
+        }
+    }
+
+    @Test void splitBorderedContainerRendersAsSingleCropOnEachSlide() throws Exception {
+        CssBorder.Side side = new CssBorder.Side(2, "black", "solid");
+        ComputedStyle bordered = new ComputedStyle("block", "static", "visible", "visible", "black", "white",
+            "Arial", 16, 400, "normal", "left", 19.2, 1, 0, false, false,
+            new CssBorder(side, side, side, side));
+        PageBlock container = new PageBlock("bordered", BlockType.CONTAINER, "", List.of(), 0, 0, 0,
+            new Bounds(10, 20, 80, 60), null, TransformSummary.none(), List.of(), bordered, List.of(), List.of(),
+            null, null, List.of(), AuthoringHints.none(), List.of());
+        var base = model(List.of(container));
+        var page = new com.nicodim.ocapp.pagemodel.PageModel(base.schemaVersion(), base.document(), base.capture(),
+            new com.nicodim.ocapp.pagemodel.PageGeometry(100, 100, new Bounds(0, 0, 100, 50), 0, 0),
+            base.blocks(), base.rootIds(), base.assets(), base.warnings());
+        var top = new com.nicodim.ocapp.pagination.SlideSlice(0,
+            new com.nicodim.ocapp.pagination.SourceBounds(0,0,100,50), new com.nicodim.ocapp.pagination.SlideViewport(720,360),
+            com.nicodim.ocapp.pagination.BreakRationale.FALLBACK, List.of());
+        var bottom = new com.nicodim.ocapp.pagination.SlideSlice(1,
+            new com.nicodim.ocapp.pagination.SourceBounds(0,50,100,50), new com.nicodim.ocapp.pagination.SlideViewport(720,360),
+            com.nicodim.ocapp.pagination.BreakRationale.DOCUMENT_END, List.of());
+        BufferedImage screenshot = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+        byte[] bytes = new HybridPptxRenderer(properties).render(screenshot, page,
+            new PaginationPlan(100,100,List.of(top,bottom),List.of()));
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
+            assertThat(show.getSlides()).hasSize(2).allSatisfy(slide -> {
+                assertThat(slide.getShapes()).singleElement().isInstanceOf(XSLFPictureShape.class);
+                var anchor = slide.getShapes().getFirst().getAnchor();
+                assertThat(anchor.getX()).isCloseTo(72d, org.assertj.core.data.Offset.offset(.01));
+                assertThat(anchor.getWidth()).isCloseTo(576d, org.assertj.core.data.Offset.offset(.01));
+                assertThat(anchor.getHeight()).isCloseTo(216d, org.assertj.core.data.Offset.offset(.01));
+            });
         }
     }
 

@@ -66,7 +66,7 @@ public final class EditableRenderPlanner {
         for (PageBlock block : blocks) {
             if (hasCompositeAncestor(block, byId, nativeCompositeRoots)) continue;
             if (!requiresLocalizedFallback(block, byId) && !tablePolicyFallback(block, slice, maxNativeTableCells,
-                maxNativeTableColumns, minNativeColumnPoints)) continue;
+                maxNativeTableColumns, minNativeColumnPoints) && !splitBorderedContainer(block, slice)) continue;
             if (hasFallbackAncestor(block, byId, fallbackRoots)) continue;
             RenderItem.Rect clipped = clippedBounds(block, left, right, top, bottom);
             if (clipped != null) {
@@ -79,7 +79,8 @@ public final class EditableRenderPlanner {
         Set<String> classified = new HashSet<>(fallbackRoots);
         Set<String> nativeRoots = new HashSet<>();
         for (PageBlock block : blocks) {
-            if (hasFallbackAncestor(block, byId, fallbackRoots) || hasCompositeAncestor(block, byId, nativeRoots)) continue;
+            if (fallbackRoots.contains(block.id()) || hasFallbackAncestor(block, byId, fallbackRoots)
+                || hasCompositeAncestor(block, byId, nativeRoots)) continue;
             RenderItem nativeItem = toNative(block, slice, maxNativeTableCells, maxNativeTableColumns, minNativeColumnPoints, byId);
             if (nativeItem == null) continue;
             boolean fragmentable = nativeItem instanceof RenderItem.NativeBackground || nativeItem instanceof RenderItem.NativeTable;
@@ -221,10 +222,19 @@ public final class EditableRenderPlanner {
             if (!CssColors.supported(cell.fillColor()) || !CssColors.supported(cell.textColor())
                 || !supportedAlignment(cell.textAlign()) || cell.fontSize() <= 0) return false;
             for (TableSemantics.Border border : List.of(cell.top(), cell.right(), cell.bottom(), cell.left()))
-                if (border.widthPixels() > 0 && (!CssColors.supported(border.color())
+                if (!Double.isFinite(border.widthPixels()) || border.widthPixels() < 0
+                    || border.widthPixels() > 96 || border.widthPixels() > 0 && (!CssColors.supported(border.color())
                     || !Set.of("solid", "dashed", "dotted", "double", "none", "hidden").contains(border.style().toLowerCase(Locale.ROOT)))) return false;
         }
         return true;
+    }
+
+    private static boolean splitBorderedContainer(PageBlock block, SlideSlice slice) {
+        if (block.type() != BlockType.CONTAINER || !block.style().border().visible()) return false;
+        return block.bounds().x() < slice.source().x() - EPSILON
+            || block.bounds().right() > slice.source().x() + slice.source().width() + EPSILON
+            || block.bounds().y() < slice.source().y() - EPSILON
+            || block.bounds().bottom() > slice.source().bottom() + EPSILON;
     }
 
     private static boolean tablePolicyFallback(PageBlock block, SlideSlice slice, int maxCells, int maxColumns, double minColumnPoints) {

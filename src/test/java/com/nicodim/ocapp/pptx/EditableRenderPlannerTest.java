@@ -66,6 +66,22 @@ class EditableRenderPlannerTest {
         assertThat(item.spans().getFirst().hyperlink()).isNull();
     }
 
+    @Test void splitBorderedContainersUseOneBoundedCropPerVerticalAndHorizontalSlice() {
+        CssBorder.Side side = new CssBorder.Side(2, "black", "solid");
+        ComputedStyle bordered = borderedStyle(new CssBorder(side, side, side, side), "white");
+        PageBlock vertical = styledBlock("vertical", BlockType.CONTAINER, new Bounds(10, 20, 80, 60), bordered, "");
+        SlideSlice top = new SlideSlice(0,new SourceBounds(0,0,100,50),new SlideViewport(720,360),BreakRationale.FALLBACK,List.of());
+        SlideSlice bottom = new SlideSlice(1,new SourceBounds(0,50,100,50),new SlideViewport(720,360),BreakRationale.DOCUMENT_END,List.of());
+        assertThat(planner.plan(model(List.of(vertical)),top,10)).containsExactly(new RenderItem.ScreenshotCrop(new RenderItem.Rect(10,20,80,30)));
+        assertThat(planner.plan(model(List.of(vertical)),bottom,10)).containsExactly(new RenderItem.ScreenshotCrop(new RenderItem.Rect(10,50,80,30)));
+
+        PageBlock horizontal = styledBlock("horizontal", BlockType.CONTAINER, new Bounds(20,5,60,30), bordered, "");
+        SlideSlice left = new SlideSlice(0,new SourceBounds(0,0,50,50),new SlideViewport(360,360),BreakRationale.FALLBACK,List.of());
+        SlideSlice right = new SlideSlice(1,new SourceBounds(50,0,50,50),new SlideViewport(360,360),BreakRationale.DOCUMENT_END,List.of());
+        assertThat(planner.plan(model(List.of(horizontal)),left,10)).containsExactly(new RenderItem.ScreenshotCrop(new RenderItem.Rect(20,5,30,30)));
+        assertThat(planner.plan(model(List.of(horizontal)),right,10)).containsExactly(new RenderItem.ScreenshotCrop(new RenderItem.Rect(50,5,30,30)));
+    }
+
     @Test void groupsOverlapAndUnsupportedSemanticAreaIntoCropAndSuppressesDescendants() {
         PageBlock list = block("list", BlockType.LIST, "", List.of("child"), new Bounds(0, 0, 50, 30),
             List.of(), List.of(), List.of(), false, List.of());
