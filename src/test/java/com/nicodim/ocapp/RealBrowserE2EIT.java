@@ -5,13 +5,19 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.nicodim.ocapp.browser.BrowserFactory;
 import com.nicodim.ocapp.browser.BrowserSession;
+import com.nicodim.ocapp.browser.ChromePageRenderer;
 import com.nicodim.ocapp.config.ConverterProperties;
+import com.nicodim.ocapp.conversion.OutputFormat;
+import com.nicodim.ocapp.security.UrlSecurityPolicy;
 import com.nicodim.ocapp.pagemodel.AuthoringHints;
 import com.nicodim.ocapp.pagemodel.BlockType;
 import com.nicodim.ocapp.pagemodel.DomPageExtractor;
 import com.nicodim.ocapp.pagemodel.PageBlock;
 import com.nicodim.ocapp.pagemodel.PageModel;
 import com.nicodim.ocapp.pagemodel.PageModelDiagnostics;
+import com.nicodim.ocapp.pagination.PaginationOptions;
+import com.nicodim.ocapp.pagination.SmartPaginationPlanner;
+import com.nicodim.ocapp.pptx.PptxTemplateLoader;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.awt.image.BufferedImage;
@@ -91,6 +97,7 @@ class RealBrowserE2EIT {
         fixture.createContext("/m3-mixed", this::m3MixedFixture);
         fixture.createContext("/m5-graphics", this::m5GraphicsFixture);
         fixture.createContext("/m6-hints", this::m6HintsFixture);
+        fixture.createContext("/m7-template", this::m7TemplateFixture);
         fixture.createContext("/acceptance-0.4", this::acceptance04Fixture);
         fixture.createContext("/hint-case/", this::hintCaseFixture);
         fixture.createContext("/m5-pixel.png", this::m5Pixel);
@@ -449,6 +456,85 @@ class RealBrowserE2EIT {
         }
     }
 
+    @Test void rendersM7TemplateBrandingThroughRealChromiumAndLibreOffice() throws Exception {
+        String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
+        assumeTrue(!executable.isBlank(), "External-office smoke is opt-in; set -Docapp.e2e.libreoffice=/path/to/soffice");
+        Path soffice = Path.of(executable).toAbsolutePath().normalize();
+        assertThat(soffice).isExecutable();
+        String artifactSetting = configured("ocapp.e2e.artifactsDir", "OCAPP_E2E_ARTIFACTS_DIR");
+        boolean retainArtifacts = !artifactSetting.isBlank();
+        Path work = retainArtifacts ? Path.of(artifactSetting).toAbsolutePath().normalize() : Files.createTempDirectory("ocapp-m7-office-e2e-");
+        Files.createDirectories(work);
+        Path template = work.resolve("m7-template-source.pptx"), logo = work.resolve("m7-logo.png");
+        try (XMLSlideShow show = new XMLSlideShow()) {
+            show.createSlide(); show.removeSlide(0);
+            try (var output = Files.newOutputStream(template)) { show.write(output); }
+        }
+        BufferedImage logoImage = new BufferedImage(24, 12, BufferedImage.TYPE_INT_RGB);
+        var graphics = logoImage.createGraphics(); graphics.setColor(new java.awt.Color(25, 80, 180)); graphics.fillRect(0, 0, 24, 12); graphics.dispose();
+        assertThat(ImageIO.write(logoImage, "png", logo.toFile())).isTrue();
+        ConverterProperties options = new ConverterProperties();
+        options.getPptx().setLegacyFallbackEnabled(false);
+        options.getPptx().getTemplate().setPath(template.toString());
+        options.getPptx().getBrand().setLogoPath(logo.toString());
+        options.getPptx().getBrand().setFooter("M7 branded fixture");
+        options.getPptx().getBrand().setSourceMode(ConverterProperties.Pptx.Brand.SourceMode.ORIGIN);
+        options.getPptx().getBrand().setSlideNumbers(true);
+        try (BrowserSession session = application.getBean(BrowserFactory.class).open()) {
+            URI source = URI.create(fixtureBase + "/m7-template");
+            session.driver().get(source.toASCIIString());
+            PageModel extracted = new DomPageExtractor(options.getPageModel(), options.getPptx()).extract(session.driver(), source);
+            assertThat(extracted.blocks()).filteredOn(block -> block.hints().breakBefore()).hasSize(1);
+            var contentBox = new PptxTemplateLoader(options).contentBox();
+            assertThat(new SmartPaginationPlanner().plan(extracted, new PaginationOptions(
+                contentBox.getWidth(), contentBox.getHeight(), options.getPptx().getMinSliceHeightPixels(),
+                options.getPptx().getMaxSlides())).slices()).hasSize(2);
+        }
+        byte[] bytes = new ChromePageRenderer(application.getBean(BrowserFactory.class), options,
+            application.getBean(UrlSecurityPolicy.class)).render(URI.create(fixtureBase + "/m7-template"), OutputFormat.PPTX);
+        Path deck = work.resolve("m7-template-branding.pptx"), pdf = work.resolve("m7-template-branding.pdf");
+        Path profile = work.resolve("libreoffice-m7-profile"), log = work.resolve("m7-libreoffice.log");
+        Files.write(deck, bytes);
+        try {
+            try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
+                assertThat(show.getSlides()).hasSize(2).allSatisfy(slide -> {
+                    assertThat(slide.getSlideLayout()).isNotNull(); assertThat(slide.getSlideMaster()).isNotNull();
+                    assertThat(slide.getTheme()).isNotNull();
+                    String text = slide.getShapes().stream().filter(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
+                        .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast).map(t -> t.getText()).collect(Collectors.joining(" "));
+                    assertThat(text).contains("M7 branded fixture", "http://localhost:");
+                    assertThat(slide.getShapes()).anyMatch(XSLFPictureShape.class::isInstance);
+                });
+                assertThat(show.getSlides().get(0).getSlideLayout().getType()).isEqualTo(org.apache.poi.xslf.usermodel.SlideLayout.SECTION_HEADER);
+                assertThat(show.getProperties().getCustomProperties().getProperty("ocapp.template.contract").getLpwstr()).isEqualTo("1");
+            }
+            Process process = new ProcessBuilder(soffice.toString(), "--headless", "--nologo", "--nodefault", "--nolockcheck",
+                "--norestore", "-env:UserInstallation=" + profile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
+                "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            boolean completed = process.waitFor(45, TimeUnit.SECONDS);
+            if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
+            assertThat(completed).withFailMessage("LibreOffice M7 conversion timed out; log=%s", log).isTrue();
+            assertThat(process.exitValue()).withFailMessage("LibreOffice M7 exit; log=%s%n%s", log, Files.readString(log)).isZero();
+            try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+                assertThat(document.getNumberOfPages()).isEqualTo(2);
+                String text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT);
+                assertThat(text).contains("m7 first section", "m7 closing section", "m7 branded fixture")
+                    .containsOnlyOnce("m7 first section").containsOnlyOnce("m7 closing section")
+                    .doesNotContain("click to edit master");
+                PDFRenderer renderer = new PDFRenderer(document);
+                for (int page = 0; page < document.getNumberOfPages(); page++) {
+                    BufferedImage image = renderer.renderImageWithDPI(page, 144);
+                    assertThat(image.getWidth()).isBetween(1000, 4000); assertThat(image.getHeight()).isBetween(500, 3000);
+                    if (retainArtifacts) assertThat(ImageIO.write(image, "png",
+                        work.resolve("m7-template-branding-page-" + (page + 1) + ".png").toFile())).isTrue();
+                }
+            }
+        } finally {
+            deleteTree(profile);
+            if (!retainArtifacts) deleteTree(work);
+        }
+    }
+
     @Test void rendersM6HintDeckThroughConfiguredLibreOffice() throws Exception {
         String executable = configured("ocapp.e2e.libreoffice", "OCAPP_E2E_LIBREOFFICE");
         assumeTrue(!executable.isBlank(), "External-office smoke is opt-in; set -Docapp.e2e.libreoffice=/path/to/soffice");
@@ -685,6 +771,16 @@ class RealBrowserE2EIT {
             <svg width='20' height='20'><rect width='20' height='20'/></svg><canvas width='20' height='20'></canvas>
             <div class='chart' data-pptx-chart><canvas width='20' height='20'></canvas></div><video width='20' height='20'></video>
             <p class='hidden'>hidden-secret</p><p data-pptx-ignore>ignored-secret</p><div id='render-ready'>ready</div>
+            </body></html>
+            """);
+    }
+
+    private void m7TemplateFixture(HttpExchange exchange) throws IOException {
+        if ("HEAD".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(200, -1); exchange.close(); return; }
+        sendHtml(exchange, """
+            <!doctype html><html><head><style>html,body{margin:0}section{height:300px;padding:24px;box-sizing:border-box}h1{color:#1950b4}</style></head><body>
+            <section data-pptx-title='M7 first section' data-pptx-layout='section'><h1>M7 first section</h1><p>Editable template content</p></section>
+            <section data-pptx-slide='break-before' data-pptx-title='M7 closing section' data-pptx-layout='closing'><h1>M7 closing section</h1><p id='render-ready'>Branded closing content</p></section>
             </body></html>
             """);
     }

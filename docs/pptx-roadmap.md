@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код `0.4.0`: M3 и M6 прошли acceptance hardening поверх выпущенного M3–M6 baseline. Последующие M7+ разделы остаются целевой архитектурой и в `0.4.0` не реализованы.
+Ниже baseline `0.4.0` дополнен текущей unreleased M7 implementation: M3/M6 выпущены и их issues закрыты; M7 реализован на этой ветке, но ещё не объявлен release. M8+ остаются целевой архитектурой.
 
 ### HTTP и orchestration
 
@@ -210,7 +210,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M3 — редактируемые text и images
 
-- **Status:** acceptance hardening in `0.4.0`; issue #13 остаётся открытым до явного разрешения на закрытие
+- **Status:** released/hardened in `0.4.0`; issue #13 closed 2026-10-12
 - **Target version:** `0.4.0`
 - **Issue:** [#13 — editable text and images](https://github.com/denspbru/ocapp/issues/13)
 - **Dependencies:** M1, M2.
@@ -254,7 +254,7 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 
 ### M6 — authoring hints `data-pptx-*`
 
-- **Status:** acceptance hardening in `0.4.0`; issue #16 остаётся открытым до явного разрешения на закрытие
+- **Status:** released/hardened in `0.4.0`; issue #16 closed 2026-10-12
 - **Target version:** `0.4.0`
 - **Issue:** [#16 — data-pptx authoring hints](https://github.com/denspbru/ocapp/issues/16)
 - **Dependencies:** M1, M2; для `render="native"` — M3/M4/M5 по типу блока.
@@ -268,11 +268,11 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 
 ### M7 — templates и branding
 
-- **Status:** planned
+- **Status:** implemented on the current branch, unreleased; issue #17 remains open pending release
 - **Target version:** `0.4.x`
 - **Issue:** [#17 — PPTX templates, master layouts and branding](https://github.com/denspbru/ocapp/issues/17)
 - **Dependencies:** M3; M6 для per-block/per-slide layout hints.
-- **Deliverables:** validated `.pptx` template loader; master/layout selection; built-in default theme; logo/theme/fonts/footer/source URL/numbering options; template compatibility tests.
+- **Deliverables:** bounded pre-POI ZIP/package validation and immutable cache; fresh sessions; REJECT/REMOVE content policy; semantic layout aliases and shared content box; template-authoritative theme/master/layout; bounded logo/colors/fonts/footer/source origin/path/numbering; visual+hybrid paths; structural reopen validator; real Chromium/LibreOffice fixture with retained artifacts.
 - **Acceptance criteria:**
   - valid configured template выбирается без изменения default behavior при отсутствии template;
   - missing/invalid/untrusted template даёт stable diagnostic error до browser work, где возможно;

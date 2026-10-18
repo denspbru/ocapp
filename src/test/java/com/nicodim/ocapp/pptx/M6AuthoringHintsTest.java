@@ -63,6 +63,16 @@ class M6AuthoringHintsTest {
         assertThat(first.slices().getFirst().breakRationale()).isEqualTo(BreakRationale.EXPLICIT_HINT);
     }
 
+    @Test void explicitSlideBreakIsPreservedWhenTheWholeDocumentFitsOneSlide() {
+        PaginationOptions roomy = new PaginationOptions(100, 200, 10, 10);
+        PageBlock hinted = block("hinted", 0, new Bounds(0, 50, 100, 20),
+            hints(false, AuthoringHints.BREAK_BEFORE, "", "", "", AuthoringHints.Render.AUTO), false, "hinted");
+        PaginationPlan plan = new SmartPaginationPlanner().plan(model(100, 105, List.of(hinted)), roomy);
+        assertThat(plan.slices()).hasSize(2);
+        assertThat(plan.slices().getFirst().source().bottom()).isEqualTo(50);
+        assertThat(plan.slices().getFirst().breakRationale()).isEqualTo(BreakRationale.EXPLICIT_HINT);
+    }
+
     @Test void explicitSlideBreakWinsOverAutomaticSmallRemainderCollapseWithoutChangingNoHintBehavior() {
         PaginationOptions options = new PaginationOptions(100, 100, 10, 10);
         PageBlock hinted = block("hinted", 0, new Bounds(0, 50, 100, 20),

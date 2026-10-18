@@ -133,6 +133,11 @@ public class ConversionService implements ConversionOperations {
         Map<String, String> previousMdc = MDC.getCopyOfContextMap();
         setMdc(callerMdc);
         try {
+            // Local PPTX assets are validated under the same permit and deadline as rendering,
+            // before any URL resolution, network activity, or browser acquisition.
+            renderer.preflight(format);
+            if (Thread.currentThread().isInterrupted())
+                throw timeout("Conversion was interrupted during preflight", new InterruptedException());
             URI initial = urlPolicy.validate(url);
             URI finalUri = navigationResolver.resolve(initial);
             byte[] bytes = renderer.render(finalUri, format, context);

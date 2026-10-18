@@ -7,9 +7,12 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -145,6 +148,9 @@ public class ConverterProperties {
     }
 
     public static class Pptx {
+        @Valid private final Template template = new Template();
+        @Valid private final Layouts layouts = new Layouts();
+        @Valid private final Brand brand = new Brand();
         @DecimalMin("1.0") private double slideWidthInches = 13.333;
         @DecimalMin("1.0") private double slideHeightInches = 7.5;
         @Min(1) @Max(500) private int maxSlides = 100;
@@ -161,6 +167,9 @@ public class ConverterProperties {
         @Pattern(regexp = "png|svg") private String graphicsExportFormat = "png";
         @Min(1) private long maxGraphicsExportPixels = 16_000_000L;
         @Min(1024) private long maxGraphicsExportBytes = 8L * 1024 * 1024;
+        public Template getTemplate() { return template; }
+        public Layouts getLayouts() { return layouts; }
+        public Brand getBrand() { return brand; }
         public double getSlideWidthInches() { return slideWidthInches; } public void setSlideWidthInches(double v) { slideWidthInches = v; }
         public double getSlideHeightInches() { return slideHeightInches; } public void setSlideHeightInches(double v) { slideHeightInches = v; }
         public int getMaxSlides() { return maxSlides; } public void setMaxSlides(int v) { maxSlides = v; }
@@ -177,5 +186,68 @@ public class ConverterProperties {
         public String getGraphicsExportFormat() { return graphicsExportFormat; } public void setGraphicsExportFormat(String v) { graphicsExportFormat = v; }
         public long getMaxGraphicsExportPixels() { return maxGraphicsExportPixels; } public void setMaxGraphicsExportPixels(long v) { maxGraphicsExportPixels = v; }
         public long getMaxGraphicsExportBytes() { return maxGraphicsExportBytes; } public void setMaxGraphicsExportBytes(long v) { maxGraphicsExportBytes = v; }
+
+
+        public static class Template {
+            public enum OriginalSlidePolicy { REJECT, REMOVE }
+            @Size(max = 4096) private String path = "";
+            @Size(max = 4096) private String trustedRoot = "";
+            @Min(1024) private long maxBytes = 10L * 1024 * 1024;
+            @Min(1) @Max(20_000) private int maxEntries = 2_000;
+            @Min(1024) private long maxEntryBytes = 10L * 1024 * 1024;
+            @Min(1024) private long maxUncompressedBytes = 50L * 1024 * 1024;
+            @DecimalMin("1.0") @DecimalMax("10000.0") private double maxCompressionRatio = 100.0;
+            @NotNull private OriginalSlidePolicy originalSlidePolicy = OriginalSlidePolicy.REJECT;
+            public String getPath() { return path; } public void setPath(String v) { path = v == null ? "" : v; }
+            public String getTrustedRoot() { return trustedRoot; } public void setTrustedRoot(String v) { trustedRoot = v == null ? "" : v; }
+            public long getMaxBytes() { return maxBytes; } public void setMaxBytes(long v) { maxBytes = v; }
+            public int getMaxEntries() { return maxEntries; } public void setMaxEntries(int v) { maxEntries = v; }
+            public long getMaxEntryBytes() { return maxEntryBytes; } public void setMaxEntryBytes(long v) { maxEntryBytes = v; }
+            public long getMaxUncompressedBytes() { return maxUncompressedBytes; } public void setMaxUncompressedBytes(long v) { maxUncompressedBytes = v; }
+            public double getMaxCompressionRatio() { return maxCompressionRatio; } public void setMaxCompressionRatio(double v) { maxCompressionRatio = v; }
+            public OriginalSlidePolicy getOriginalSlidePolicy() { return originalSlidePolicy; } public void setOriginalSlidePolicy(OriginalSlidePolicy v) { originalSlidePolicy = v; }
+        }
+
+        public static class Layouts {
+            @Pattern(regexp = "blank|title|title-only|content|section|closing") private String defaultAlias = "content";
+            @Size(max = 6) private Map<@Pattern(regexp = "blank|title|title-only|content|section|closing") String, @Size(max = 256) String> aliases = new LinkedHashMap<>();
+            public String getDefaultAlias() { return defaultAlias; } public void setDefaultAlias(String v) { defaultAlias = v; }
+            public Map<String,String> getAliases() { return aliases; }
+            public void setAliases(Map<String,String> v) { aliases = v == null ? new LinkedHashMap<>() : new LinkedHashMap<>(v); }
+        }
+
+        public static class Brand {
+            public enum SourceMode { NONE, ORIGIN, ORIGIN_PATH }
+            @Size(max = 4096) private String logoPath = "";
+            @Size(max = 4096) private String trustedRoot = "";
+            @Min(1024) private long maxLogoBytes = 2L * 1024 * 1024;
+            @DecimalMin("0.0") private double logoWidthPoints = 0;
+            @DecimalMin("0.0") private double logoHeightPoints = 0;
+            @DecimalMin("0.0") private double marginPoints = 18;
+            @Size(max = 2048) private String footer = "";
+            private boolean sourceUrl;
+            @NotNull private SourceMode sourceMode = SourceMode.NONE;
+            private boolean slideNumbers;
+            @Pattern(regexp = "|#[0-9a-fA-F]{6}") private String primaryColor = "";
+            @Pattern(regexp = "|#[0-9a-fA-F]{6}") private String textColor = "";
+            @Size(max = 256) private String titleFontFamily = "";
+            @Size(max = 256) private String bodyFontFamily = "";
+            @Size(max = 256) private String footerFontFamily = "";
+            public String getLogoPath() { return logoPath; } public void setLogoPath(String v) { logoPath = v == null ? "" : v; }
+            public String getTrustedRoot() { return trustedRoot; } public void setTrustedRoot(String v) { trustedRoot = v == null ? "" : v; }
+            public long getMaxLogoBytes() { return maxLogoBytes; } public void setMaxLogoBytes(long v) { maxLogoBytes = v; }
+            public double getLogoWidthPoints() { return logoWidthPoints; } public void setLogoWidthPoints(double v) { logoWidthPoints = v; }
+            public double getLogoHeightPoints() { return logoHeightPoints; } public void setLogoHeightPoints(double v) { logoHeightPoints = v; }
+            public double getMarginPoints() { return marginPoints; } public void setMarginPoints(double v) { marginPoints = v; }
+            public String getFooter() { return footer; } public void setFooter(String v) { footer = v == null ? "" : v; }
+            public boolean isSourceUrl() { return sourceUrl; } public void setSourceUrl(boolean v) { sourceUrl = v; }
+            public SourceMode getSourceMode() { return sourceMode; } public void setSourceMode(SourceMode v) { sourceMode = v; }
+            public boolean isSlideNumbers() { return slideNumbers; } public void setSlideNumbers(boolean v) { slideNumbers = v; }
+            public String getPrimaryColor() { return primaryColor; } public void setPrimaryColor(String v) { primaryColor = v == null ? "" : v; }
+            public String getTextColor() { return textColor; } public void setTextColor(String v) { textColor = v == null ? "" : v; }
+            public String getTitleFontFamily() { return titleFontFamily; } public void setTitleFontFamily(String v) { titleFontFamily = v == null ? "" : v; }
+            public String getBodyFontFamily() { return bodyFontFamily; } public void setBodyFontFamily(String v) { bodyFontFamily = v == null ? "" : v; }
+            public String getFooterFontFamily() { return footerFontFamily; } public void setFooterFontFamily(String v) { footerFontFamily = v == null ? "" : v; }
+        }
     }
 }

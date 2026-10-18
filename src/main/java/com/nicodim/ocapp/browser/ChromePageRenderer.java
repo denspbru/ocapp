@@ -11,6 +11,10 @@ import com.nicodim.ocapp.pagination.PaginationPlan;
 import com.nicodim.ocapp.pagination.SlideSlice;
 import com.nicodim.ocapp.pagination.SmartPaginationPlanner;
 import com.nicodim.ocapp.pptx.HybridPptxRenderer;
+import com.nicodim.ocapp.pptx.AuthoringHintResolver;
+import com.nicodim.ocapp.pptx.PptxOutputValidator;
+import com.nicodim.ocapp.pptx.PptxBranding;
+import com.nicodim.ocapp.pptx.PptxTemplateLoader;
 import com.nicodim.ocapp.security.UrlSecurityPolicy;
 import com.nicodim.ocapp.support.ConversionException;
 import java.awt.Dimension;
@@ -51,6 +55,8 @@ public class ChromePageRenderer implements PageRenderer {
     private final ConverterProperties properties;
     private final UrlSecurityPolicy urlPolicy;
     private final NavigationTrace navigationTrace;
+    private final PptxTemplateLoader templateLoader;
+    private final PptxBranding branding;
 
     @Autowired
     public ChromePageRenderer(BrowserFactory browserFactory, ConverterProperties properties, UrlSecurityPolicy urlPolicy) {
@@ -62,13 +68,20 @@ public class ChromePageRenderer implements PageRenderer {
         this.properties = properties;
         this.urlPolicy = urlPolicy;
         this.navigationTrace = navigationTrace;
+        this.templateLoader = new PptxTemplateLoader(properties);
+        this.branding = new PptxBranding(properties);
     }
 
     @Override public byte[] render(URI uri, OutputFormat format) {
         return render(uri, format, new RenderContext());
     }
 
+    @Override public void preflight(OutputFormat format) {
+        if (format == OutputFormat.PPTX) { templateLoader.preflight(); branding.preflight(); }
+    }
+
     @Override public byte[] render(URI uri, OutputFormat format, RenderContext context) {
+        preflight(format);
         BrowserSession session = browserFactory.open(context);
         try (session) {
             ChromeDriver driver = session.driver();
@@ -315,9 +328,9 @@ public class ChromePageRenderer implements PageRenderer {
 
     PaginationPlan planPageModel(PageModel model) {
         var ppt = properties.getPptx();
+        java.awt.geom.Rectangle2D content = templateLoader.contentBox();
         return new SmartPaginationPlanner().plan(model, new PaginationOptions(
-            ppt.getSlideWidthInches() * 72, ppt.getSlideHeightInches() * 72,
-            ppt.getMinSliceHeightPixels(), ppt.getMaxSlides()));
+            content.getWidth(), content.getHeight(), ppt.getMinSliceHeightPixels(), ppt.getMaxSlides()));
     }
 
     private byte[] capturePptx(ChromeDriver driver, PreparedPptx prepared) {
@@ -326,8 +339,8 @@ public class ChromePageRenderer implements PageRenderer {
         if (!(data instanceof String encoded)) throw new IllegalStateException("Chrome returned no screenshot data");
         byte[] screenshot = decodeBase64(encoded, properties.getLimits().getMaxScreenshotBytes());
         validatePngHeader(screenshot);
-        if (prepared == null) return createPresentation(screenshot, null);
-        if (!properties.getPptx().isEditableEnabled()) return createPresentation(screenshot, prepared.plan());
+        if (prepared == null) return createPresentation(screenshot, null, null, URI.create(driver.getCurrentUrl()));
+        if (!properties.getPptx().isEditableEnabled()) return createPresentation(screenshot, prepared.plan(), prepared.model(), prepared.model().document().source());
         return createEditablePresentation(screenshot, prepared.model(), prepared.plan());
     }
 
@@ -336,7 +349,7 @@ public class ChromePageRenderer implements PageRenderer {
         try {
             BufferedImage source = ImageIO.read(new ByteArrayInputStream(screenshot));
             if (source == null) throw new IOException("Unsupported screenshot");
-            return new HybridPptxRenderer(properties).render(source, model, plan);
+            return new HybridPptxRenderer(properties, templateLoader, branding).render(source, model, plan);
         } catch (ConversionException ex) { throw ex; }
         catch (IOException ex) {
             throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PPTX_CREATION_FAILED",
@@ -374,34 +387,55 @@ public class ChromePageRenderer implements PageRenderer {
     }
 
     byte[] createPresentation(byte[] screenshot) {
-        return createPresentation(screenshot, null);
+        return createPresentation(screenshot, null, null, null);
     }
 
     byte[] createPresentation(byte[] screenshot, PaginationPlan plan) {
+        return createPresentation(screenshot, plan, null, null);
+    }
+
+    private byte[] createPresentation(byte[] screenshot, PaginationPlan plan, PageModel model, URI sourceUri) {
         validatePngHeader(screenshot);
         try {
             long imageWidth = unsignedInt(screenshot, 16), imageHeight = unsignedInt(screenshot, 20);
             List<PixelSlice> pixelSlices = plan == null ? legacySlices(imageWidth, imageHeight) : plannedSlices(plan, imageWidth, imageHeight);
+            int brandedShapes = branding.shapeCount(sourceUri);
+            if (brandedShapes + 1 > properties.getPptx().getMaxItemsPerSlide())
+                throw tooLarge("PPTX shape count exceeds the configured limit");
+            if (branding.assetCount() > properties.getPageModel().getMaxAssets()
+                || branding.assetBytes() > properties.getPageModel().getMaxAssetBytes())
+                throw tooLarge("PPTX branding assets exceed the configured limit");
             BufferedImage source = ImageIO.read(new ByteArrayInputStream(screenshot));
             if (source == null) throw new IOException("Unsupported screenshot");
-            var ppt = properties.getPptx();
-            try (XMLSlideShow show = new XMLSlideShow(); BoundedByteArrayOutputStream output = new BoundedByteArrayOutputStream(properties.getLimits().getMaxOutputBytes())) {
-                int slideWidth = (int) Math.round(ppt.getSlideWidthInches() * 72);
-                int slideHeight = (int) Math.round(ppt.getSlideHeightInches() * 72);
-                show.setPageSize(new Dimension(slideWidth, slideHeight));
+            templateLoader.preflight();
+            try (XMLSlideShow show = templateLoader.openFresh(); BoundedByteArrayOutputStream output = new BoundedByteArrayOutputStream(properties.getLimits().getMaxOutputBytes())) {
+                int slideWidth = templateLoader.pageSize().width;
+                int slideHeight = templateLoader.pageSize().height;
+                if (!templateLoader.configured()) show.setPageSize(new Dimension(slideWidth, slideHeight));
+                java.awt.geom.Rectangle2D content = templateLoader.contentBox();
+                java.util.List<AuthoringHintResolver.SlideHints> hints = model == null || plan == null ? java.util.List.of()
+                    : new AuthoringHintResolver().resolve(model, plan).slides();
+                int slideIndex = 0;
                 for (PixelSlice pixelSlice : pixelSlices) {
                     int y = pixelSlice.y(), height = pixelSlice.height();
                     BufferedImage crop = source.getSubimage(0, y, source.getWidth(), height);
                     BoundedByteArrayOutputStream png = new BoundedByteArrayOutputStream(properties.getLimits().getMaxScreenshotBytes());
                     if (!ImageIO.write(crop, "png", png)) throw new IOException("PNG encoder is unavailable");
                     XSLFPictureData picture = show.addPicture(png.toByteArray(), PictureData.PictureType.PNG);
-                    XSLFSlide slide = show.createSlide();
+                    String alias = hints.isEmpty() ? "" : hints.get(slideIndex).layout();
+                    XSLFSlide slide = templateLoader.createSlide(show, alias);
+                    if (!alias.isEmpty()) slide.getXmlObject().getCSld().setName("ocapp-layout:" + alias);
                     XSLFPictureShape shape = slide.createPicture(picture);
-                    double renderedHeight = (double) height / source.getWidth() * slideWidth;
-                    shape.setAnchor(new java.awt.geom.Rectangle2D.Double(0, 0, slideWidth, renderedHeight));
+                    double renderedHeight = (double) height / source.getWidth() * content.getWidth();
+                    shape.setAnchor(new java.awt.geom.Rectangle2D.Double(content.getX(), content.getY(), content.getWidth(), renderedHeight));
+                    branding.applyTheme(slide, templateLoader.configured());
+                    branding.apply(show, slide, slideIndex + 1, sourceUri, templateLoader.configured());
+                    slideIndex++;
                 }
                 show.write(output);
-                return output.toByteArray();
+                byte[] bytes = output.toByteArray();
+                PptxOutputValidator.validate(bytes, pixelSlices.size(), templateLoader.configured());
+                return bytes;
             }
         } catch (ConversionException ex) { throw ex; }
         catch (IOException ex) {
@@ -411,7 +445,8 @@ public class ChromePageRenderer implements PageRenderer {
 
     private List<PixelSlice> legacySlices(long imageWidth, long imageHeight) {
         validateImageDimensions(imageWidth, imageHeight);
-        double aspect = properties.getPptx().getSlideWidthInches() / properties.getPptx().getSlideHeightInches();
+        java.awt.geom.Rectangle2D content = templateLoader.contentBox();
+        double aspect = content.getWidth() / content.getHeight();
         long cropHeight = Math.max(1, Math.round(imageWidth / aspect));
         long count = (imageHeight + cropHeight - 1) / cropHeight;
         if (count > properties.getPptx().getMaxSlides()) throw maxSlides();

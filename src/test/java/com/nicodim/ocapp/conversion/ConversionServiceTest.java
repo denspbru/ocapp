@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import com.nicodim.ocapp.browser.BrowserSession;
 import com.nicodim.ocapp.config.ConverterProperties;
@@ -54,6 +55,50 @@ class ConversionServiceTest {
         ConversionResult result = service.convert(uri.toString(), OutputFormat.PDF);
         assertThat(result.bytes()).containsExactly(1, 2, 3);
         assertThat(result.filename()).isEqualTo("example.org-20260928T204000Z.pdf");
+    }
+
+    @Test void formatPreflightFailsBeforeUrlAndNetworkWork() {
+        PageRenderer renderer = new PageRenderer() {
+            public byte[] render(URI value, OutputFormat format) { throw new AssertionError("rendered"); }
+            public void preflight(OutputFormat format) {
+                throw new ConversionException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+                    "PPTX_TEMPLATE_INVALID", "Configured presentation template is invalid");
+            }
+        };
+        assertCode(() -> service(value -> value, renderer).convert(uri.toString(), OutputFormat.PPTX),
+            "PPTX_TEMPLATE_INVALID");
+        verifyNoInteractions(policy);
+    }
+
+    @Test void operationTimeoutIncludesPptxPreflightAndSkipsUrlWork() {
+        limits.setOperationTimeout(Duration.ofMillis(30));
+        PageRenderer renderer = new PageRenderer() {
+            public byte[] render(URI value, OutputFormat format) { throw new AssertionError("rendered"); }
+            public void preflight(OutputFormat format) {
+                try { Thread.sleep(500); } catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
+            }
+        };
+        assertCode(() -> service(value -> value, renderer).convert(uri.toString(), OutputFormat.PPTX), "CONVERSION_TIMEOUT");
+        verifyNoInteractions(policy);
+    }
+
+    @Test void blockedPptxPreflightConsumesTheSingleCapacityPermit() throws Exception {
+        limits.setMaxConcurrent(1); limits.setAcquireTimeout(Duration.ofMillis(20)); limits.setOperationTimeout(Duration.ofSeconds(2));
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        PageRenderer renderer = new PageRenderer() {
+            public byte[] render(URI value, OutputFormat format) { return new byte[]{1}; }
+            public void preflight(OutputFormat format) {
+                entered.countDown();
+                try { release.await(); } catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
+            }
+        };
+        ConversionService service = service(value -> value, renderer);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread first = Thread.ofPlatform().start(() -> { try { service.convert(uri.toString(), OutputFormat.PPTX); } catch (Throwable ex) { failure.set(ex); } });
+        assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+        assertCode(() -> service.convert(uri.toString(), OutputFormat.PPTX), "CAPACITY_EXCEEDED");
+        release.countDown(); first.join(1000);
+        assertThat(failure.get()).isNull();
     }
 
     @Test void operationTimeoutIncludesInitialDnsValidation() {

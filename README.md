@@ -139,6 +139,12 @@ converter.security.allow-private-addresses=true
 | `converter.pptx.graphics-export-format` | `png` | `png` или `svg` для ECharts `getDataURL`; Canvas остаётся PNG |
 | `converter.pptx.max-graphics-export-pixels` | `16000000` | Pixel budget до temporary Canvas/ECharts allocation |
 | `converter.pptx.max-graphics-export-bytes` | `8388608` | Per-graphic decoded-byte budget до Java decode/POI embedding |
+| `converter.pptx.template.path` | empty | Absolute operator-local `.pptx`; empty keeps the exact built-in path |
+| `converter.pptx.template.trusted-root` / `converter.pptx.brand.trusted-root` | empty | Optional absolute real-path containment root. Empty safely defaults to the configured file’s real parent for backward compatibility; every path component is checked without following symlinks. |
+| `converter.pptx.template.original-slide-policy` | `REJECT` | Existing template content slides are rejected; explicit `REMOVE` deletes them from each fresh session |
+| `converter.pptx.template.max-*` | see `application.properties` | Compressed bytes, ZIP entries, entry bytes, expanded bytes and ratio gates before POI |
+| `converter.pptx.layouts.default-alias` | `content` | Global semantic layout fallback; per-page hint wins first |
+| `converter.pptx.brand.*` | disabled/empty | Bounded local PNG/JPEG logo, colors/fonts/footer, redacted source URL and slide numbers |
 | `converter.page-model.max-blocks` / `max-depth` | `5000` / `64` | DOM model graph bounds до materialization |
 | `converter.page-model.max-text-length` / `max-table-cells` | `1000000` / `20000` | Общий text и table-cell budgets |
 | `converter.page-model.max-assets` / `max-asset-bytes` | `2000` / `52428800` | Asset references и оценка embedded bytes |
@@ -179,8 +185,14 @@ Chromium по-прежнему создаёт один full-page PNG в уже �
 | `data-pptx-ignore` | attribute/empty, `true`, `false` | Empty/`true` исключает весь subtree до PageModel и rendering; `false` явно не исключает. |
 | `data-pptx-keep-together` | attribute/empty, `true`, `false` | Empty/`true` запрещает heuristic split, если block помещается; explicit slide break имеет приоритет, oversized block остаётся bounded forced split. |
 | `data-pptx-notes` | непустой bounded text | Первый по DOM order value внутри slice записывается в speaker notes. |
-| `data-pptx-layout` | `blank`, `title-only` | Выбирает встроенный semantic profile и сохраняется как slide name `ocapp-layout:<value>`; template/master selection не реализуется до M7. |
+| `data-pptx-layout` | `blank`, `title`, `title-only`, `content`, `section`, `closing` | Выбирает allowlisted semantic alias; с template создаёт slide из соответствующего layout того же package. Precedence: hint → global default → `content` → `blank`. |
 | `data-pptx-render` | `image`, `native` | `image` принудительно создаёт один localized screenshot crop block-а и подавляет descendants/native shapes под ним; `native` запрашивает editable representation, но transforms, clipping, overlap, unsupported types/styles/assets и все safety/resource checks всё равно переводят region в localized fallback. |
+
+## PPTX templates and branding (M7, unreleased)
+
+Optional `converter.pptx.template.path` принимает только absolute operator-local `.pptx`. Under the conversion permit and operation timeout—but before URL validation, DNS, navigation, network, or browser acquisition—OCApp reads it into bounded immutable cached bytes. Every path component is checked without following symlinks, an optional real `trusted-root` is enforced, and pre/post file identity/size/mtime must match. The package gate validates ZIP names/duplicates/traversal/absolute paths/count/sizes/ratio, normalized internal relationship targets and target existence, strict part/content types, and rejects external relationships, VBA/macros, ActiveX, OLE/packages, comments/customXml/sample parts, notes in templates, disguised media, and malformed/extreme presentation structures; it then opens a fresh `XMLSlideShow` for every conversion. It never changes JVM `ZipSecureFile` globals. Existing content slides are rejected by default; `REMOVE` is an explicit deployment policy. Template theme/master/layout relationships remain authoritative.
+
+Aliases are fixed to `blank|title|title-only|content|section|closing`; configured layout names must resolve uniquely. One validated layout content box drives pagination, visual crops and editable mapping. Branding supports a bounded local PNG/JPEG logo whose dimensions/image count are read from ImageReader metadata before any pixel decode, optional colors/fonts when no template is configured, footer, source origin+path with user-info/query/fragment removed, and slide numbers. One immutable preflighted branding snapshot is shared by visual and editable paths. Branding shapes/assets participate in existing shape/asset/output budgets. Every deck is reopened by POI and checked for slide count, page geometry, template relationships and in-slide finite anchors. No-template defaults remain unchanged.
 
 Precedence v1: security/resource validation всегда выше hints; `ignore=true` удаляет subtree; explicit slide break выше pagination heuristics/`keep-together`; ancestor `render=image` выше descendant `render=native`; safety/representability fallback выше `render=native`. Для title/notes/layout побеждает первый непустой value по `(domOrder,id)`; отличающиеся последующие values дают один content-free `PPTX_HINT_CONFLICT` на атрибут и slide. Invalid enum/boolean/blank text даёт bounded content-free `PPTX_HINT_INVALID` и трактуется как отсутствие hint; Java boundary дополнительно отклоняет ненормализованные значения стабильным `PAGEMODEL_INVALID`. Значения title/notes и metadata подчиняются `max-field-length` и `max-metadata-characters`; parser warnings — `max-warnings`, а conflicts — не более трёх на slide при bounded `max-slides`. Warning custom properties содержат только code, slide index и имя атрибута, но не page content.
 
@@ -204,7 +216,7 @@ Problem JSON содержит `status`, стабильный `code`, безоп�
 ## Известные ограничения
 
 - M5 graphics path намеренно консервативен: Apache POI сохраняет прошедший allowlist SVG как vector picture, но Canvas всегда имеет честную raster boundary в Chromium PNG export; unsupported SVG features (включая style/animation/foreignObject/external or URL refs), tainted Canvas и failed ECharts остаются localized raster fallback.
-- PowerPoint validation в этой ветке не заявлена. Обязательный structural reopen выполняет Apache POI; opt-in LibreOffice gate документирован ниже и сохраняет evidence artifacts, когда реально запущен.
+- Microsoft PowerPoint validation в этой ветке не заявлена. Обязательный structural reopen выполняет Apache POI; fail-closed Chromium + LibreOffice M7 gate сохраняет PPTX/PDF/log и PNG каждой страницы.
 - Application URL checks и DevTools interception — defense in depth, не network boundary.
 - Process-tree supervisor рассчитан на дочерние процессы того же OS user и требует разрешения среды на `ProcessHandle.destroy/destroyForcibly`; deployment-level PID/cgroup supervision остаётся дополнительным рубежом.
 - MHTML CDP API возвращает Java `String`, поэтому его исходное Chrome/Selenium representation нельзя ограничить до получения; последующее UTF-8 копирование и HTTP output ограничены.

@@ -6,6 +6,9 @@ import java.net.URI;
 public interface PageRenderer {
     byte[] render(URI uri, OutputFormat format);
 
+    /** Performs format-specific local validation under conversion capacity, before URL or network work. */
+    default void preflight(OutputFormat format) { }
+
     default byte[] render(URI uri, OutputFormat format, RenderContext context) {
         return render(uri, format);
     }

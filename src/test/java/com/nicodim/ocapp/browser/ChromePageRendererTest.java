@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.conversion.OutputFormat;
@@ -19,6 +20,8 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import javax.imageio.ImageIO;
@@ -26,8 +29,10 @@ import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xslf.usermodel.XSLFPictureShape;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ChromePageRendererTest {
+    @TempDir Path temporary;
     private ConverterProperties properties;
     private ChromePageRenderer renderer;
 
@@ -36,6 +41,42 @@ class ChromePageRendererTest {
         properties.getPptx().setSlideWidthInches(10);
         properties.getPptx().setSlideHeightInches(5);
         renderer = new ChromePageRenderer(mock(BrowserFactory.class), properties, mock(UrlSecurityPolicy.class));
+    }
+
+    @Test void missingTemplateFailsBeforeOpeningBrowser() {
+        BrowserFactory factory = mock(BrowserFactory.class);
+        properties.getPptx().getTemplate().setPath(temporary.resolve("missing.pptx").toAbsolutePath().toString());
+        ChromePageRenderer configured = new ChromePageRenderer(factory, properties, mock(UrlSecurityPolicy.class));
+        assertCode(() -> configured.render(java.net.URI.create("https://example.test"), OutputFormat.PPTX), "PPTX_TEMPLATE_NOT_FOUND");
+        verifyNoInteractions(factory);
+    }
+
+    @Test void visualModeUsesConfiguredTemplateMasterThemeAndBranding() throws Exception {
+        Path template = temporary.resolve("visual.pptx");
+        try (XMLSlideShow show = new XMLSlideShow()) {
+            show.createSlide(); show.removeSlide(0);
+            try (var output = Files.newOutputStream(template)) { show.write(output); }
+        }
+        properties.getPptx().getTemplate().setPath(template.toAbsolutePath().toString());
+        properties.getPptx().getBrand().setFooter("Visual footer");
+        properties.getPptx().getBrand().setSlideNumbers(true);
+        renderer = new ChromePageRenderer(mock(BrowserFactory.class), properties, mock(UrlSecurityPolicy.class));
+        try (XMLSlideShow show = new XMLSlideShow(new ByteArrayInputStream(renderer.createPresentation(png(100, 100))))) {
+            assertThat(show.getSlides()).isNotEmpty().allSatisfy(slide -> {
+                assertThat(slide.getSlideMaster()).isNotNull();
+                assertThat(slide.getTheme()).isNotNull();
+                assertThat(slide.getShapes().stream().filter(org.apache.poi.xslf.usermodel.XSLFTextShape.class::isInstance)
+                    .map(org.apache.poi.xslf.usermodel.XSLFTextShape.class::cast).map(t -> t.getText()).toList())
+                    .anyMatch(text -> text.contains("Visual footer"));
+            });
+        }
+    }
+
+    @Test void visualModeCountsBrandingShapesAgainstSlideBudget() throws Exception {
+        properties.getPptx().setMaxItemsPerSlide(1);
+        properties.getPptx().getBrand().setFooter("footer");
+        renderer = new ChromePageRenderer(mock(BrowserFactory.class), properties, mock(UrlSecurityPolicy.class));
+        assertCode(() -> renderer.createPresentation(png(100, 100)), "OUTPUT_TOO_LARGE");
     }
 
     @Test void createsValidLegacyMultiSlidePresentationWithoutNetwork() throws Exception {
