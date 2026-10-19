@@ -56,7 +56,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 
 Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, safe/unsafe SVG, delayed Canvas, реально tainted cross-origin Canvas, delayed/missing ECharts, DOM-aware pagination, M6 hint extraction/precedence/OOXML metadata, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction и cleanup временных профилей.
 
-Release gate `0.4.0` состоит из Apache POI structural reopen и fail-closed real-Chromium + LibreOffice visual smoke. Microsoft PowerPoint в автоматизированной среде не запускался и не заявляется как evidence; ручная проверка в PowerPoint выполняется, когда он доступен, и обязательна перед `1.0`/GA.
+Release gate `0.5.0` состоит из Apache POI structural reopen и fail-closed real-Chromium + LibreOffice visual smoke. Microsoft PowerPoint в автоматизированной среде не запускался и не заявляется как evidence; ручная проверка в PowerPoint выполняется, когда он доступен, и обязательна перед `1.0`/GA.
 
 Опциональный external-office gate использует явно заданный локальный LibreOffice, отдельные bounded profiles и timeout; platform path не зашит в build. Он генерирует mixed M3, graphics M5, hints M6 и встроенный пятистраничный `test_report` реальным Chromium pipeline, экспортирует decks через Impress в PDF и рендерит PDF через PDFBox. M3 проверяет один slide/page, отсутствие потери/дублирования marker text, clickable URI, native image и localized Canvas fallback; M5 проверяет POI SVG+PNG picture types и видимые sanitized SVG, delayed Canvas и ECharts цвета; M6 проверяет две страницы, единственность title и видимый forced localized image; `test_report` проверяет пять hybrid slides, единственность native h1/h2, editable text/table, две SVG chart pictures, отсутствие slide-sized raster shape и сохраняет PNG preview каждой страницы. При заданном artifacts directory сохраняются исходные PPTX, PDF, PNG и LibreOffice logs:
 
@@ -75,7 +75,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true \
 Встроенный default — `converter.security.egress-mode=PROXY` с пустым `proxy-url`, поэтому приложение **намеренно не запускается**, пока validating proxy не настроен:
 
 ```bash
-java -jar target/ocapp-0.4.0.jar \
+java -jar target/ocapp-0.5.0.jar \
   --converter.security.proxy-url=http://proxy.internal:3128 \
   --converter.browser.binary=/usr/bin/chromium \
   --converter.browser.driver-path=/usr/bin/chromedriver
@@ -176,7 +176,7 @@ Chromium по-прежнему создаёт один full-page PNG в уже �
 
 ## Authoring hints contract v1 (M6)
 
-Ветка `0.4.0` поддерживает opt-in HTML contract v1; его версия записывается в PPTX custom property `ocapp.authoring-hints.contract=1`. Наличие любого распознанного атрибута, включая `data-pptx-ignore="false"` и `data-pptx-keep-together="false"`, записывает contract metadata независимо от нормализованного эффекта. Наличие hints не меняет URL validation, browser isolation/readiness, PageModel budgets, screenshot/asset/shape/pixel limits или output bounds. Страница без этих атрибутов проходит прежний automatic pagination и hybrid rendering без изменений.
+Релиз `0.5.0` поддерживает opt-in HTML contract v1; его версия записывается в PPTX custom property `ocapp.authoring-hints.contract=1`. Наличие любого распознанного атрибута, включая `data-pptx-ignore="false"` и `data-pptx-keep-together="false"`, записывает contract metadata независимо от нормализованного эффекта. Наличие hints не меняет URL validation, browser isolation/readiness, PageModel budgets, screenshot/asset/shape/pixel limits или output bounds. Страница без этих атрибутов проходит прежний automatic pagination и hybrid rendering без изменений.
 
 | Атрибут | Допустимое значение | Семантика v1 |
 |---|---|---|
@@ -188,7 +188,7 @@ Chromium по-прежнему создаёт один full-page PNG в уже �
 | `data-pptx-layout` | `blank`, `title`, `title-only`, `content`, `section`, `closing` | Выбирает allowlisted semantic alias; с template создаёт slide из соответствующего layout того же package. Precedence: hint → global default → `content` → `blank`. |
 | `data-pptx-render` | `image`, `native` | `image` принудительно создаёт один localized screenshot crop block-а и подавляет descendants/native shapes под ним; `native` запрашивает editable representation, но transforms, clipping, overlap, unsupported types/styles/assets и все safety/resource checks всё равно переводят region в localized fallback. |
 
-## PPTX templates and branding (M7, unreleased)
+## PPTX templates and branding (M7, 0.5.0)
 
 Optional `converter.pptx.template.path` принимает только absolute operator-local `.pptx`. Under the conversion permit and operation timeout—but before URL validation, DNS, navigation, network, or browser acquisition—OCApp reads it into bounded immutable cached bytes. Every path component is checked without following symlinks, an optional real `trusted-root` is enforced, and pre/post file identity/size/mtime must match. The package gate validates ZIP names/duplicates/traversal/absolute paths/count/sizes/ratio, normalized internal relationship targets and target existence, strict part/content types, and rejects external relationships, VBA/macros, ActiveX, OLE/packages, comments/customXml/sample parts, notes in templates, disguised media, and malformed/extreme presentation structures; it then opens a fresh `XMLSlideShow` for every conversion. It never changes JVM `ZipSecureFile` globals. Existing content slides are rejected by default; `REMOVE` is an explicit deployment policy. Template theme/master/layout relationships remain authoritative.
 

@@ -69,7 +69,7 @@ Parser работает внутри уже bounded extraction pass. Invalid enu
 
 Title создаётся как POI title placeholder, notes — как speaker-notes body. `layout` выбирает allowlisted semantic alias и записывается в slide name; при M7 template создаётся slide из layout того же package с precedence hint → global → content → blank. PPTX custom property `ocapp.authoring-hints.contract=1` фиксирует contract version. Pages без recognized hints сохраняют M2–M5 automatic planning/rendering и не получают contract property.
 
-## M7 templates and branding (unreleased)
+## M7 templates and branding (0.5.0)
 
 `converter.pptx.template.path` принимает только absolute operator-local `.pptx`. Локальный preflight выполняется под capacity permit и operation timeout, но до URL/DNS/navigation и browser acquisition: bounded immutable bytes/manifest, duplicate/traversal/absolute ZIP-name checks, entry/count/expanded-size/ratio limits, запрет external relationships, macros/VBA, ActiveX, OLE/embedded packages и linked media, затем structural POI validation. JVM `ZipSecureFile` globals не меняются. Fresh `XMLSlideShow` создаётся на каждую conversion; existing content slides default `REJECT`, explicit `REMOVE`.
 
@@ -79,7 +79,7 @@ Template theme/master/layout authoritative. Alias targets должны быть 
 
 PageModel хранит четыре computed border sides. Native text/container border допустим только при uniform visible `solid` sides, finite bounded nonnegative width и parseable opaque color; width переводится из CSS px в PPT points единым coordinate mapping. Unsupported, non-uniform, dashed/dotted/complex или translucent border переводит bounded region в localized screenshot fallback, сохраняя background и не создавая duplicate border/content shapes. Safe bounded embedded data images остаются native; external/non-embedded references renderer повторно не загружает и сохраняет через screenshot fallback.
 
-Автоматизированный release gate `0.4.0`: exact/finite Apache POI reopen assertions и fail-closed Chromium + LibreOffice visual checks. Microsoft PowerPoint не запускался в этом release environment; manual PowerPoint validation выполняется при доступности и обязательна перед `1.0`/GA.
+Автоматизированный release gate `0.5.0`: exact/finite Apache POI reopen assertions и fail-closed Chromium + LibreOffice visual checks. Microsoft PowerPoint не запускался в этом release environment; manual PowerPoint validation выполняется при доступности и обязательна перед `1.0`/GA.
 
 ## Resource bounds
 

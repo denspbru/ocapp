@@ -32,7 +32,7 @@
 - **FR-011:** startup failure закрывает driver/service/profile; оба configured executables валидируются.
 - **FR-012:** readiness health bounded, cached single-flight, реально открывает/закрывает browser, cancellable на startup и входит в readiness group.
 - **FR-013:** stable Problem codes, correlation ID и safe logs.
-- **FR-014 (M7, unreleased):** optional absolute operator-local `.pptx` проходит bounded ZIP/package validation до permit/network/browser; bytes и manifest кешируются immutable, а каждая conversion получает fresh POI session.
+- **FR-014 (M7, 0.5.0):** optional absolute operator-local `.pptx` проходит bounded ZIP/package validation до permit/network/browser; bytes и manifest кешируются immutable, а каждая conversion получает fresh POI session.
 - **FR-015:** template content slides default `REJECT`; explicit `REMOVE`. Semantic aliases `blank|title|title-only|content|section|closing` выбираются hint → global → content → blank и обязаны разрешаться однозначно в том же package.
 - **FR-016:** template theme/master/layout authoritative; общий validated content box используется pagination, visual и editable paths. No-template/default branding сохраняет прежнее поведение.
 - **FR-017:** bounded local PNG/JPEG logo, optional no-template colors/fonts, footer, source origin/origin+path и slide numbers входят в shape/asset/output budgets; URL credentials/query/fragment не выводятся.
