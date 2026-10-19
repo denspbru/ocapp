@@ -17,7 +17,7 @@
 
 Успех имеет `200`, binary body, точный `Content-Length`, safe attachment filename и correlation ID. Framework errors сохраняют `404`, `405`/`Allow`, `415`; unexpected exception становится sanitized `500`. Problem JSON не раскрывает stack/path/query/document/credentials.
 
-## 3. Реализованные функциональные требования M0
+## 3. Реализованные функциональные требования M0–M7
 
 - **FR-001:** обязательный absolute HTTP(S) URL до 4096 chars, без user-info.
 - **FR-002:** request host и exact/wildcard patterns canonicalized одинаково: IDNA ASCII, lowercase, удаление всех terminal dots.
@@ -32,6 +32,11 @@
 - **FR-011:** startup failure закрывает driver/service/profile; оба configured executables валидируются.
 - **FR-012:** readiness health bounded, cached single-flight, реально открывает/закрывает browser, cancellable на startup и входит в readiness group.
 - **FR-013:** stable Problem codes, correlation ID и safe logs.
+- **FR-014 (M7, 0.5.0):** optional absolute operator-local `.pptx` проходит bounded ZIP/package validation до permit/network/browser; bytes и manifest кешируются immutable, а каждая conversion получает fresh POI session.
+- **FR-015:** template content slides default `REJECT`; explicit `REMOVE`. Semantic aliases `blank|title|title-only|content|section|closing` выбираются hint → global → content → blank и обязаны разрешаться однозначно в том же package.
+- **FR-016:** template theme/master/layout authoritative; общий validated content box используется pagination, visual и editable paths. No-template/default branding сохраняет прежнее поведение.
+- **FR-017:** bounded local PNG/JPEG logo, optional no-template colors/fonts, footer, source origin/origin+path и slide numbers входят в shape/asset/output budgets; URL credentials/query/fragment не выводятся.
+- **FR-018:** каждый PPTX проходит POI structural reopen с проверкой slide count, geometry, template relationships и finite in-slide anchors.
 
 ## 4. Нефункциональные требования
 

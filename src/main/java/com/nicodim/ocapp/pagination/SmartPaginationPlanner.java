@@ -86,20 +86,18 @@ public final class SmartPaginationPlanner {
 
     private static Choice choose(double start, double ideal, double height, double minimum,
                                  List<Candidate> candidates, List<PageBlock> blocks) {
-        if (ideal >= height - EPSILON) return new Choice(height, BreakRationale.DOCUMENT_END, false);
-        // Preserve the automatic single-slide remainder rule, but never let it erase a valid
-        // author-requested boundary that leaves two bounded minimum-size slices.
-        if (height - ideal < minimum - EPSILON) {
-            Candidate explicit = null;
-            for (Candidate candidate : candidates) if (candidate.priority() == 0
-                && candidate.position() >= start + minimum - EPSILON
-                && candidate.position() <= ideal + EPSILON
-                && height - candidate.position() >= minimum - EPSILON
-                && (explicit == null || candidate.position() > explicit.position())) explicit = candidate;
-            return explicit == null ? new Choice(height, BreakRationale.DOCUMENT_END, false)
-                : new Choice(explicit.position(), explicit.rationale(), false);
-        }
-        for (int priority = 0; priority <= 2; priority++) {
+        // Explicit author boundaries win even when the whole document would fit on one slide.
+        // Select the earliest valid boundary so multiple explicit hints are not collapsed into one.
+        Candidate explicit = null;
+        for (Candidate candidate : candidates) if (candidate.priority() == 0
+            && candidate.position() >= start + minimum - EPSILON
+            && candidate.position() <= ideal + EPSILON
+            && height - candidate.position() >= minimum - EPSILON
+            && (explicit == null || candidate.position() < explicit.position())) explicit = candidate;
+        if (explicit != null) return new Choice(explicit.position(), explicit.rationale(), false);
+        if (ideal >= height - EPSILON || height - ideal < minimum - EPSILON)
+            return new Choice(height, BreakRationale.DOCUMENT_END, false);
+        for (int priority = 1; priority <= 2; priority++) {
             Candidate best = null;
             for (Candidate candidate : candidates) {
                 if (candidate.priority() != priority || candidate.position() < start + minimum - EPSILON

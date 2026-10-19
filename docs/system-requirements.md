@@ -53,7 +53,7 @@ Scripts никогда не принимаются через API. Delayed Canva
 
 ## M6 authoring hints contract v1
 
-OCApp `0.4.0` распознаёт только следующий versioned allowlist: `data-pptx-slide="break-before"`, non-empty bounded `data-pptx-title`, boolean `data-pptx-ignore`, boolean `data-pptx-keep-together`, non-empty bounded `data-pptx-notes`, `data-pptx-layout="blank|title-only"`, `data-pptx-render="image|native"`. Boolean form — attribute без value/empty или `true`; `false` отключает hint. Presence recognized attribute сохраняется независимо от normalized effect: false-only `ignore`/`keep-together` записывает `ocapp.authoring-hints.contract=1`, но не меняет planning/rendering. Enum и boolean values trim/case-normalize; title/notes сохраняют bounded source value.
+OCApp распознаёт только следующий versioned allowlist: `data-pptx-slide="break-before"`, non-empty bounded `data-pptx-title`, boolean `data-pptx-ignore`, boolean `data-pptx-keep-together`, non-empty bounded `data-pptx-notes`, `data-pptx-layout="blank|title|title-only|content|section|closing"`, `data-pptx-render="image|native"`. Boolean form — attribute без value/empty или `true`; `false` отключает hint. Presence recognized attribute сохраняется независимо от normalized effect: false-only `ignore`/`keep-together` записывает `ocapp.authoring-hints.contract=1`, но не меняет planning/rendering. Enum и boolean values trim/case-normalize; title/notes сохраняют bounded source value.
 
 Parser работает внутри уже bounded extraction pass. Invalid enum/boolean/blank text не попадает в normalized `AuthoringHints`, создаёт content-free `PPTX_HINT_INVALID` в общем `page-model.max-warnings` budget и далее эквивалентен отсутствию hint. Независимый Java validator разрешает только normalized values и иначе возвращает stable content-free `PAGEMODEL_INVALID`. Text metadata по-прежнему ограничены `max-field-length`, `max-metadata-characters` и общими model limits.
 
@@ -67,13 +67,19 @@ Parser работает внутри уже bounded extraction pass. Invalid enu
 6. `render=native` — preference, а не bypass: unsafe/unrepresentable transform, clipping, overlap, type/style/asset всё равно использует localized screenshot fallback.
 7. Для каждого итогового slide первый non-empty title/notes/layout по `(domOrder,id)` побеждает; другой value даёт максимум один `PPTX_HINT_CONFLICT` на attribute/slide без values в warning. Максимум conflict warnings равен трём на slide и дополнительно ограничен `pptx.max-slides`.
 
-Title создаётся как POI title placeholder, notes — как speaker-notes body. `layout` выбирает только встроенный semantic profile (`blank`/`title-only`) и записывается в slide name; загрузка templates/master layouts остаётся M7. PPTX custom property `ocapp.authoring-hints.contract=1` фиксирует contract version. Pages без recognized hints сохраняют M2–M5 automatic planning/rendering и не получают contract property.
+Title создаётся как POI title placeholder, notes — как speaker-notes body. `layout` выбирает allowlisted semantic alias и записывается в slide name; при M7 template создаётся slide из layout того же package с precedence hint → global → content → blank. PPTX custom property `ocapp.authoring-hints.contract=1` фиксирует contract version. Pages без recognized hints сохраняют M2–M5 automatic planning/rendering и не получают contract property.
+
+## M7 templates and branding (0.5.0)
+
+`converter.pptx.template.path` принимает только absolute operator-local `.pptx`. Локальный preflight выполняется под capacity permit и operation timeout, но до URL/DNS/navigation и browser acquisition: bounded immutable bytes/manifest, duplicate/traversal/absolute ZIP-name checks, entry/count/expanded-size/ratio limits, запрет external relationships, macros/VBA, ActiveX, OLE/embedded packages и linked media, затем structural POI validation. JVM `ZipSecureFile` globals не меняются. Fresh `XMLSlideShow` создаётся на каждую conversion; existing content slides default `REJECT`, explicit `REMOVE`.
+
+Template theme/master/layout authoritative. Alias targets должны быть unique; one content box используется planner, visual crops и editable mapper. Optional branding: bounded local PNG/JPEG logo, no-template colors/fonts, footer, source `NONE|ORIGIN|ORIGIN_PATH`, slide numbers. Branding входит в shape/asset/output budgets. Final bytes проходят POI reopen validator. Stable errors content-free и не содержат filesystem/layout/relationship/page content.
 
 ## M3 border/image fidelity hardening
 
 PageModel хранит четыре computed border sides. Native text/container border допустим только при uniform visible `solid` sides, finite bounded nonnegative width и parseable opaque color; width переводится из CSS px в PPT points единым coordinate mapping. Unsupported, non-uniform, dashed/dotted/complex или translucent border переводит bounded region в localized screenshot fallback, сохраняя background и не создавая duplicate border/content shapes. Safe bounded embedded data images остаются native; external/non-embedded references renderer повторно не загружает и сохраняет через screenshot fallback.
 
-Автоматизированный release gate `0.4.0`: exact/finite Apache POI reopen assertions и fail-closed Chromium + LibreOffice visual checks. Microsoft PowerPoint не запускался в этом release environment; manual PowerPoint validation выполняется при доступности и обязательна перед `1.0`/GA.
+Автоматизированный release gate `0.5.0`: exact/finite Apache POI reopen assertions и fail-closed Chromium + LibreOffice visual checks. Microsoft PowerPoint не запускался в этом release environment; manual PowerPoint validation выполняется при доступности и обязательна перед `1.0`/GA.
 
 ## Resource bounds
 

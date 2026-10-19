@@ -7,7 +7,7 @@ public record AuthoringHints(boolean keepTogether, String slide, String title, S
                              boolean recognizedAttributePresent) {
     public static final String CONTRACT_VERSION = "1";
     public static final String BREAK_BEFORE = "break-before";
-    public static final Set<String> LAYOUTS = Set.of("", "blank", "title-only");
+    public static final Set<String> LAYOUTS = Set.of("", "blank", "title", "title-only", "content", "section", "closing");
 
     public enum Render { AUTO, IMAGE, NATIVE }
 

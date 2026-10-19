@@ -50,19 +50,38 @@ import org.springframework.http.HttpStatus;
 public final class HybridPptxRenderer {
     private final ConverterProperties properties;
     private final EditableRenderPlanner planner = new EditableRenderPlanner();
+    private final PptxTemplateLoader templateLoader;
+    private final PptxBranding branding;
 
-    public HybridPptxRenderer(ConverterProperties properties) { this.properties = properties; }
+    public HybridPptxRenderer(ConverterProperties properties) {
+        this(properties, new PptxTemplateLoader(properties));
+    }
+
+    public HybridPptxRenderer(ConverterProperties properties, PptxTemplateLoader templateLoader) {
+        this(properties, templateLoader, new PptxBranding(properties));
+    }
+
+    public HybridPptxRenderer(ConverterProperties properties, PptxTemplateLoader templateLoader, PptxBranding branding) {
+        this.properties = java.util.Objects.requireNonNull(properties, "properties");
+        this.templateLoader = java.util.Objects.requireNonNull(templateLoader, "templateLoader");
+        this.branding = java.util.Objects.requireNonNull(branding, "branding");
+    }
 
     public byte[] render(BufferedImage screenshot, PageModel model, PaginationPlan plan) {
+        templateLoader.preflight();
+        branding.preflight();
         validateScreenshotMapping(screenshot, model, plan);
         int maxItems = properties.getPptx().getMaxItemsPerSlide();
         AuthoringHintResolver.Resolution authoring = new AuthoringHintResolver().resolve(model, plan);
         List<List<RenderItem>> slideItems = new ArrayList<>(plan.slices().size());
         long cropPixels = 0;
         for (SlideSlice slice : plan.slices()) {
-            List<RenderItem> items = planner.plan(model, slice, maxItems, properties.getPptx().getMaxNativeTableCells(),
-                properties.getPptx().getMaxNativeTableColumns(), properties.getPptx().getMinNativeTableColumnPoints());
-            int semanticShapes = authoring.slides().get(slice.index()).title().isEmpty() ? 0 : 1;
+            AuthoringHintResolver.SlideHints hints = authoring.slides().get(slice.index());
+            List<RenderItem> items = withoutDuplicateSemanticTitle(planner.plan(model, slice, maxItems,
+                properties.getPptx().getMaxNativeTableCells(), properties.getPptx().getMaxNativeTableColumns(),
+                properties.getPptx().getMinNativeTableColumnPoints()), hints.title());
+            int semanticShapes = hints.title().isEmpty() ? 0 : 1;
+            semanticShapes += branding.shapeCount(model.document().source());
             if (items.size() + semanticShapes > maxItems) throw tooLarge("PPTX shape count exceeds the configured limit");
             for (RenderItem item : items) if (item instanceof RenderItem.ScreenshotCrop crop) {
                 PixelRect pixels = pixelRect(crop.bounds(), screenshot, model);
@@ -73,12 +92,11 @@ public final class HybridPptxRenderer {
             slideItems.add(items);
         }
 
-        var ppt = properties.getPptx();
-        try (XMLSlideShow show = new XMLSlideShow();
+        try (XMLSlideShow show = templateLoader.openFresh();
              BoundedByteArrayOutputStream output = new BoundedByteArrayOutputStream(properties.getLimits().getMaxOutputBytes())) {
-            int slideWidth = (int) Math.round(ppt.getSlideWidthInches() * 72);
-            int slideHeight = (int) Math.round(ppt.getSlideHeightInches() * 72);
-            show.setPageSize(new Dimension(slideWidth, slideHeight));
+            int slideWidth = templateLoader.pageSize().width;
+            int slideHeight = templateLoader.pageSize().height;
+            if (!templateLoader.configured()) show.setPageSize(new Dimension(slideWidth, slideHeight));
             var custom = show.getProperties().getCustomProperties();
             boolean hasAuthoringHints = model.recognizedAttributePresent();
             if (!hasAuthoringHints) for (var warning : model.warnings()) if (warning.code().startsWith("PPTX_HINT_")) {
@@ -90,13 +108,21 @@ public final class HybridPptxRenderer {
                 custom.addProperty("ocapp.authoring-hints.warning." + warningIndex++, warning.code() + ":" + warning.detail());
             for (var warning : authoring.warnings())
                 custom.addProperty("ocapp.authoring-hints.warning." + warningIndex++, warning.code() + ":" + warning.slideIndex() + ":" + warning.attribute());
+            if (templateLoader.configured()) custom.addProperty("ocapp.template.contract", "1");
             Map<String, NativePicture> nativePictures = new HashMap<>();
             Map<String, XSLFPictureData> nativeGraphics = new HashMap<>();
-            long[] assetBytes = {0};
+            if (branding.assetCount() > properties.getPageModel().getMaxAssets()
+                || branding.assetBytes() > properties.getPageModel().getMaxAssetBytes())
+                throw tooLarge("PPTX branding assets exceed the configured limit");
+            int[] assetCount = {branding.assetCount()};
+            long[] assetBytes = {branding.assetBytes()};
             for (int index = 0; index < plan.slices().size(); index++) {
                 SlideSlice slice = plan.slices().get(index);
-                XSLFSlide slide = show.createSlide();
-                CssCoordinateMapper mapper = new CssCoordinateMapper(slice);
+                String alias = authoring.slides().get(index).layout();
+                XSLFSlide slide = templateLoader.createSlide(show, alias);
+                boolean boundedContent = templateLoader.configured() || branding.shapeCount(model.document().source()) > 0;
+                CssCoordinateMapper mapper = boundedContent
+                    ? new CssCoordinateMapper(slice, templateLoader.contentBox()) : new CssCoordinateMapper(slice);
                 for (RenderItem item : slideItems.get(index)) {
                     switch (item) {
                         case RenderItem.NativeBackground background -> addBackground(slide, mapper, background);
@@ -104,15 +130,19 @@ public final class HybridPptxRenderer {
                         case RenderItem.NativeText text -> addText(slide, mapper, text);
                         case RenderItem.NativeListItem list -> addList(slide, mapper, list);
                         case RenderItem.NativeTable table -> addTable(slide, mapper, table);
-                        case RenderItem.NativeImage image -> addImage(show, slide, mapper, image, nativePictures, assetBytes);
-                        case RenderItem.NativeGraphic graphic -> addGraphic(show, slide, mapper, graphic, nativeGraphics, assetBytes);
+                        case RenderItem.NativeImage image -> addImage(show, slide, mapper, image, nativePictures, assetCount, assetBytes);
+                        case RenderItem.NativeGraphic graphic -> addGraphic(show, slide, mapper, graphic, nativeGraphics, assetCount, assetBytes);
                     }
                 }
                 // Semantic title/notes are authored after visual content so an image fallback cannot obscure the title.
-                applySlideHints(show, slide, authoring.slides().get(index), slideWidth, slideHeight);
+                applySlideHints(show, slide, authoring.slides().get(index), templateLoader.contentBox());
+                branding.applyTheme(slide, templateLoader.configured());
+                branding.apply(show, slide, index + 1, model.document().source(), templateLoader.configured());
             }
             show.write(output);
-            return output.toByteArray();
+            byte[] bytes = output.toByteArray();
+            PptxOutputValidator.validate(bytes, plan.slices().size(), templateLoader.configured());
+            return bytes;
         } catch (ConversionException ex) { throw ex; }
         catch (IOException | IllegalArgumentException ex) {
             throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PPTX_CREATION_FAILED",
@@ -120,13 +150,40 @@ public final class HybridPptxRenderer {
         }
     }
 
+    private static List<RenderItem> withoutDuplicateSemanticTitle(List<RenderItem> items, String title) {
+        if (title == null || title.isBlank()) return items;
+        String expected = title.strip();
+        ArrayList<RenderItem> result = new ArrayList<>(items);
+        for (int index = 0; index < result.size(); index++) {
+            RenderItem item = result.get(index);
+            if (item instanceof RenderItem.NativeText text) {
+                String actual = text.spans().stream().map(RenderItem.TextSpan::text)
+                    .collect(java.util.stream.Collectors.joining()).strip();
+                if (actual.equals(expected)) {
+                    result.remove(index);
+                    return List.copyOf(result);
+                }
+            }
+        }
+        return items;
+    }
+
     private static void applySlideHints(XMLSlideShow show, XSLFSlide slide,
-                                        AuthoringHintResolver.SlideHints hints, int width, int height) {
+                                        AuthoringHintResolver.SlideHints hints, Rectangle2D contentBox) {
         if (!hints.layout().isEmpty()) slide.getXmlObject().getCSld().setName("ocapp-layout:" + hints.layout());
         if (!hints.title().isEmpty()) {
-            XSLFTextBox title = slide.createTextBox();
-            title.setPlaceholder(Placeholder.TITLE);
-            title.setAnchor(new Rectangle2D.Double(width * 0.05, height * 0.03, width * 0.90, height * 0.12));
+            org.apache.poi.xslf.usermodel.XSLFTextShape title = null;
+            for (var shape : slide.getShapes()) if (shape instanceof org.apache.poi.xslf.usermodel.XSLFTextShape text
+                && (text.getTextType() == Placeholder.TITLE || text.getTextType() == Placeholder.CENTERED_TITLE)) {
+                title = text; break;
+            }
+            if (title == null) {
+                XSLFTextBox created = slide.createTextBox();
+                created.setPlaceholder(Placeholder.TITLE);
+                created.setAnchor(new Rectangle2D.Double(contentBox.getX() + contentBox.getWidth() * .05,
+                    contentBox.getY() + contentBox.getHeight() * .03, contentBox.getWidth() * .90, contentBox.getHeight() * .12));
+                title = created;
+            }
             title.setText(hints.title());
         }
         if (!hints.notes().isEmpty()) {
@@ -306,11 +363,12 @@ public final class HybridPptxRenderer {
     private static Color opaque(Color color) { return new Color(color.getRed(), color.getGreen(), color.getBlue()); }
 
     private void addImage(XMLSlideShow show, XSLFSlide slide, CssCoordinateMapper mapper, RenderItem.NativeImage image,
-                          Map<String, NativePicture> cache, long[] totalAssetBytes) throws IOException {
+                          Map<String, NativePicture> cache, int[] totalAssets, long[] totalAssetBytes) throws IOException {
         String key = image.asset().id() + "\n" + image.asset().uri();
         NativePicture picture = cache.get(key);
         if (picture == null) {
-            if (cache.size() >= properties.getPageModel().getMaxAssets()) throw tooLarge("PPTX asset count exceeds the configured limit");
+            if (totalAssets[0] >= properties.getPageModel().getMaxAssets())
+                throw tooLarge("PPTX asset count exceeds the configured limit");
             byte[] bytes = decodeAsset(image.asset());
             totalAssetBytes[0] = safeAdd(totalAssetBytes[0], bytes.length);
             if (totalAssetBytes[0] > properties.getPageModel().getMaxAssetBytes())
@@ -319,6 +377,7 @@ public final class HybridPptxRenderer {
             XSLFPictureData data = show.addPicture(bytes, pictureType(image.asset()));
             picture = new NativePicture(data, size.width(), size.height());
             cache.put(key, picture);
+            totalAssets[0]++;
         }
         Rectangle2D box = mapper.map(image.bounds());
         double scale = Math.min(box.getWidth() / picture.width(), box.getHeight() / picture.height());
@@ -330,11 +389,12 @@ public final class HybridPptxRenderer {
 
     private void addGraphic(XMLSlideShow show, XSLFSlide slide, CssCoordinateMapper mapper,
                             RenderItem.NativeGraphic graphic, Map<String, XSLFPictureData> cache,
-                            long[] totalAssetBytes) throws IOException {
+                            int[] totalAssets, long[] totalAssetBytes) throws IOException {
         String key = graphic.asset().id() + "\n" + graphic.asset().uri();
         XSLFPictureData data = cache.get(key);
         if (data == null) {
-            if (cache.size() >= properties.getPageModel().getMaxAssets()) throw tooLarge("PPTX graphic count exceeds the configured limit");
+            if (totalAssets[0] >= properties.getPageModel().getMaxAssets())
+                throw tooLarge("PPTX graphic count exceeds the configured limit");
             byte[] bytes = decodeAsset(graphic.asset());
             totalAssetBytes[0] = safeAdd(totalAssetBytes[0], bytes.length);
             if (totalAssetBytes[0] > properties.getPageModel().getMaxAssetBytes())
@@ -343,6 +403,7 @@ public final class HybridPptxRenderer {
             else imageSize(bytes);
             data = show.addPicture(bytes, pictureType(graphic.asset()));
             cache.put(key, data);
+            totalAssets[0]++;
         }
         slide.createPicture(data).setAnchor(mapper.map(graphic.bounds()));
     }

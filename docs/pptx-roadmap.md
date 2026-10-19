@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже описан код `0.4.0`: M3 и M6 прошли acceptance hardening поверх выпущенного M3–M6 baseline. Последующие M7+ разделы остаются целевой архитектурой и в `0.4.0` не реализованы.
+Ниже baseline `0.4.0` дополнен M7 release `0.5.0`: M3/M6/M7 выпущены и их issues закрываются по release workflow. M8+ остаются целевой архитектурой.
 
 ### HTTP и orchestration
 
@@ -210,7 +210,7 @@ Visual и editable modes полностью локальны и детермин
 
 ### M3 — редактируемые text и images
 
-- **Status:** acceptance hardening in `0.4.0`; issue #13 остаётся открытым до явного разрешения на закрытие
+- **Status:** released/hardened in `0.4.0`; issue #13 closed 2026-10-12
 - **Target version:** `0.4.0`
 - **Issue:** [#13 — editable text and images](https://github.com/denspbru/ocapp/issues/13)
 - **Dependencies:** M1, M2.
@@ -254,7 +254,7 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 
 ### M6 — authoring hints `data-pptx-*`
 
-- **Status:** acceptance hardening in `0.4.0`; issue #16 остаётся открытым до явного разрешения на закрытие
+- **Status:** released/hardened in `0.4.0`; issue #16 closed 2026-10-12
 - **Target version:** `0.4.0`
 - **Issue:** [#16 — data-pptx authoring hints](https://github.com/denspbru/ocapp/issues/16)
 - **Dependencies:** M1, M2; для `render="native"` — M3/M4/M5 по типу блока.
@@ -268,11 +268,11 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 
 ### M7 — templates и branding
 
-- **Status:** planned
-- **Target version:** `0.4.x`
+- **Status:** released in `0.5.0`; issue #17 closes after published artifacts are verified
+- **Target version:** `0.5.0`
 - **Issue:** [#17 — PPTX templates, master layouts and branding](https://github.com/denspbru/ocapp/issues/17)
 - **Dependencies:** M3; M6 для per-block/per-slide layout hints.
-- **Deliverables:** validated `.pptx` template loader; master/layout selection; built-in default theme; logo/theme/fonts/footer/source URL/numbering options; template compatibility tests.
+- **Deliverables:** bounded pre-POI ZIP/package validation and immutable cache; fresh sessions; REJECT/REMOVE content policy; semantic layout aliases and shared content box; template-authoritative theme/master/layout; bounded logo/colors/fonts/footer/source origin/path/numbering; visual+hybrid paths; structural reopen validator; real Chromium/LibreOffice fixture with retained artifacts.
 - **Acceptance criteria:**
   - valid configured template выбирается без изменения default behavior при отсутствии template;
   - missing/invalid/untrusted template даёт stable diagnostic error до browser work, где возможно;
@@ -283,7 +283,7 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 ### M8 — layout validation и visual regression
 
 - **Status:** planned
-- **Target version:** `0.4.x`
+- **Target version:** `0.5.x`
 - **Issue:** [#18 — layout validation and visual regression](https://github.com/denspbru/ocapp/issues/18)
 - **Dependencies:** M2, M3; расширение coverage по мере M4/M5/M7.
 - **Deliverables:** structural/layout validator; stable warning/error taxonomy; presentation quality metrics; isolated visual-regression profile; baseline approval/update procedure; diff artifacts.
@@ -297,7 +297,7 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 ### M9 — semantic mode и optional AI
 
 - **Status:** planned
-- **Target version:** `0.5`
+- **Target version:** `0.6`
 - **Issue:** [#19 — semantic presentation mode with optional AI](https://github.com/denspbru/ocapp/issues/19)
 - **Dependencies:** stable M1 PageModel, M3/M4 native renderer, M7 templates, M8 validation.
 - **Deliverables:** deterministic section detection/ranking; `summary` slide planner; source attribution; optional provider interface; explicit consent/configuration/redaction/limits; audit-safe metadata.
@@ -316,8 +316,9 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 | `0.2` | M1 PageModel + M2 smart screenshot pagination | DOM-aware visual PPTX при сохранённом legacy fallback |
 | `0.3.0` | M3 editable text/images + M4 lists/tables + M5 charts/media + M6 hints | Редактируемый hybrid renderer с bounded localized fallback и versioned authoring hints |
 | `0.4.0` | M3 + M6 acceptance hardening | Border fidelity, stronger POI reopen evidence и false-only hint contract metadata |
-| `0.4.x` | M7 templates + M8 validation | Управляемый branded hybrid renderer с расширенными quality gates |
-| `0.5` | M9 semantic mode | Deterministic summary и только opt-in external AI adapter |
+| `0.5.0` | M7 templates and branding | Управляемый branded hybrid renderer с validated local templates |
+| `0.5.x` | M8 validation | Структурная и visual-regression quality platform |
+| `0.6` | M9 semantic mode | Deterministic summary и только opt-in external AI adapter |
 | `1.0` | Production-ready consolidation | Стабильный контракт, эксплуатационные SLO/limits, compatibility и полная release validation |
 
 ## 7. Fixture и test matrix
