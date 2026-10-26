@@ -81,7 +81,7 @@ PageModel хранит четыре computed border sides. Native text/container
 
 Автоматизированный release gate `0.5.0`: exact/finite Apache POI reopen assertions и fail-closed Chromium + LibreOffice visual checks. Microsoft PowerPoint не запускался в этом release environment; manual PowerPoint validation выполняется при доступности и обязательна перед `1.0`/GA.
 
-## M8 layout validation contract
+## M8 layout validation contract (0.5.1)
 
 M8 is additive to the `0.5.0` wire contract: `/MakePPTX` keeps the existing request and binary success response. Both visual and editable paths classify generated shapes by stable POI shape ID, serialize the final PPTX, run bounded OPC validation, reopen it with POI and execute deterministic layout validation before return. The validator is mandatory; there is no bypass switch.
 
@@ -95,7 +95,7 @@ Expected visual-slice/branding, background, template-placeholder and explicitly 
 
 `pptx-visual-regression` is separate from Surefire and `real-browser`. It requires an explicitly configured local LibreOffice whose exact version matches the approved manifest, checksum-protected synthetic baselines and fixed 144-DPI PDFBox rasterization. It performs no downloads. Missing executable/baseline, checksum/version mismatch, timeout, conversion failure, page-count mismatch or comparison failure is a test failure.
 
-LibreOffice runs with a unique temporary profile, no listener, invalid network proxies, bounded captured output and process-tree termination on timeout/failure. Approved baselines are read-only test inputs. Candidate, diff and content-free comparison metadata stay below `target/pptx-visual-regression`. Existing fail-closed real-browser fixtures continue to cover text/table/SVG/Canvas/mixed/template pipelines.
+LibreOffice runs with a unique temporary profile, no listener, invalid network proxies, bounded captured output and process-tree termination on timeout/failure. Approved baselines are read-only test inputs. Candidate, diff and content-free comparison metadata stay below `target/pptx-visual-regression`. Existing fail-closed real-browser fixtures continue to cover text/table/SVG/Canvas/mixed/template pipelines. The automated `0.5.1` release gate combines Java 21 `verify`, real-browser/LibreOffice integration and checksum-protected visual regression; manual Microsoft PowerPoint validation remains required before `1.0`/GA.
 
 ## Resource bounds
 

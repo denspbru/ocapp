@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже baseline `0.4.0` дополнен M7 release `0.5.0`. M8 реализуется как обратно совместимая quality platform текущей ветки `0.5.x`; M9 остаётся целевой архитектурой.
+Ниже baseline `0.4.0` дополнен M7 release `0.5.0` и M8 release `0.5.1`. M8 является обратно совместимой quality platform линии `0.5.x`; M9 остаётся целевой архитектурой.
 
 ### HTTP и orchestration
 
@@ -282,8 +282,8 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 
 ### M8 — layout validation и visual regression
 
-- **Status:** implemented in current `0.5.x` development; unreleased and issue #18 remains open pending release workflow
-- **Target version:** `0.5.x`; wire/output compatibility baseline remains `0.5.0`
+- **Status:** released in `0.5.1`; issue #18 closes after published artifacts are verified
+- **Target version:** `0.5.1`; wire/output compatibility baseline remains `0.5.0`
 - **Issue:** [#18 — PPTX layout validation and visual regression](https://github.com/denspbru/ocapp/issues/18)
 - **Dependencies:** M2, M3; representative real-browser coverage includes M4/M5/M7.
 - **Deliverables:** immutable versioned validation policy/report/metrics; deterministic bounded post-serialization POI scan; stable content-free `PPTX_LAYOUT_*` diagnostics; visual/editable shape roles and pagination metrics; existing public `PPTX_TEMPLATE_OUTPUT_INVALID` error mapping; isolated checksummed LibreOffice/PDFBox baseline profile and bounded diff artifacts.
@@ -322,7 +322,7 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 | `0.3.0` | M3 editable text/images + M4 lists/tables + M5 charts/media + M6 hints | Редактируемый hybrid renderer с bounded localized fallback и versioned authoring hints |
 | `0.4.0` | M3 + M6 acceptance hardening | Border fidelity, stronger POI reopen evidence и false-only hint contract metadata |
 | `0.5.0` | M7 templates and branding | Управляемый branded hybrid renderer с validated local templates |
-| `0.5.x` | M8 validation | Структурная и visual-regression quality platform |
+| `0.5.1` | M8 validation | Структурная и visual-regression quality platform |
 | `0.6` | M9 semantic mode | Deterministic summary и только opt-in external AI adapter |
 | `1.0` | Production-ready consolidation | Стабильный контракт, эксплуатационные SLO/limits, compatibility и полная release validation |
 

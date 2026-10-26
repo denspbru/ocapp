@@ -56,7 +56,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 
 Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, safe/unsafe SVG, delayed Canvas, реально tainted cross-origin Canvas, delayed/missing ECharts, DOM-aware pagination, M6 hint extraction/precedence/OOXML metadata, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction и cleanup временных профилей.
 
-Release gate `0.5.0` состоит из Apache POI structural reopen и fail-closed real-Chromium + LibreOffice visual smoke. Microsoft PowerPoint в автоматизированной среде не запускался и не заявляется как evidence; ручная проверка в PowerPoint выполняется, когда он доступен, и обязательна перед `1.0`/GA.
+Release gate `0.5.1` состоит из Apache POI structural/layout validation, fail-closed real-Chromium + LibreOffice smoke и checksum-protected visual regression. Microsoft PowerPoint в автоматизированной среде не запускался и не заявляется как evidence; ручная проверка в PowerPoint выполняется, когда он доступен, и обязательна перед `1.0`/GA.
 
 Опциональный external-office gate использует явно заданный локальный LibreOffice, отдельные bounded profiles и timeout; platform path не зашит в build. Он генерирует mixed M3, graphics M5, hints M6 и встроенный пятистраничный `test_report` реальным Chromium pipeline, экспортирует decks через Impress в PDF и рендерит PDF через PDFBox. M3 проверяет один slide/page, отсутствие потери/дублирования marker text, clickable URI, native image и localized Canvas fallback; M5 проверяет POI SVG+PNG picture types и видимые sanitized SVG, delayed Canvas и ECharts цвета; M6 проверяет две страницы, единственность title и видимый forced localized image; `test_report` проверяет пять hybrid slides, единственность native h1/h2, editable text/table, две SVG chart pictures, отсутствие slide-sized raster shape и сохраняет PNG preview каждой страницы. При заданном artifacts directory сохраняются исходные PPTX, PDF, PNG и LibreOffice logs:
 
@@ -75,7 +75,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true \
 Встроенный default — `converter.security.egress-mode=PROXY` с пустым `proxy-url`, поэтому приложение **намеренно не запускается**, пока validating proxy не настроен:
 
 ```bash
-java -jar target/ocapp-0.5.0.jar \
+java -jar target/ocapp-0.5.1.jar \
   --converter.security.proxy-url=http://proxy.internal:3128 \
   --converter.browser.binary=/usr/bin/chromium \
   --converter.browser.driver-path=/usr/bin/chromedriver
@@ -201,7 +201,7 @@ Aliases are fixed to `blank|title|title-only|content|section|closing`; configure
 
 Precedence v1: security/resource validation всегда выше hints; `ignore=true` удаляет subtree; explicit slide break выше pagination heuristics/`keep-together`; ancestor `render=image` выше descendant `render=native`; safety/representability fallback выше `render=native`. Для title/notes/layout побеждает первый непустой value по `(domOrder,id)`; отличающиеся последующие values дают один content-free `PPTX_HINT_CONFLICT` на атрибут и slide. Invalid enum/boolean/blank text даёт bounded content-free `PPTX_HINT_INVALID` и трактуется как отсутствие hint; Java boundary дополнительно отклоняет ненормализованные значения стабильным `PAGEMODEL_INVALID`. Значения title/notes и metadata подчиняются `max-field-length` и `max-metadata-characters`; parser warnings — `max-warnings`, а conflicts — не более трёх на slide при bounded `max-slides`. Warning custom properties содержат только code, slide index и имя атрибута, но не page content.
 
-## PPTX layout validation и visual regression (M8)
+## PPTX layout validation и visual regression (M8, 0.5.1)
 
 M8 не меняет HTTP request/response, MIME, filename или successful binary output release `0.5.0`. Каждый сгенерированный PPTX после serialization проходит bounded package validation, POI reopen и deterministic layout scan. Non-finite/negative/out-of-slide geometry и broken picture references блокируют output через прежний sanitized `422 PPTX_TEMPLATE_OUTPUT_INVALID`. Renderer/font-dependent quality findings — `TEXT_OVERFLOW`, `UNINTENDED_OVERLAP`, `TINY_FONT`, `EMPTY_SLIDE`, `LOW_RES_IMAGE` и `MEASUREMENT_UNAVAILABLE` — warning-only в `0.5.x`, чтобы сохранить compatibility. Interruption не превращается в diagnostic и сохраняет cancellation path.
 
