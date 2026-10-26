@@ -2,6 +2,8 @@ package com.nicodim.ocapp.pptx;
 
 import com.nicodim.ocapp.config.ConverterProperties;
 import com.nicodim.ocapp.support.ConversionException;
+import com.nicodim.ocapp.pptx.validation.LayoutRole;
+import com.nicodim.ocapp.pptx.validation.LayoutValidationContext;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.geom.Rectangle2D;
@@ -92,6 +94,17 @@ public final class PptxBranding {
             XSLFTextRun run = paragraph.addNewTextRun(); run.setText(Integer.toString(slideNumber)); run.setFontSize(8d);
             style(run, templateAuthoritative);
         }
+    }
+
+    public void registerValidationRoles(XSLFSlide slide, int firstShape, int slideIndex, URI source,
+                                                LayoutValidationContext.Builder validation) {
+        int cursor = firstShape;
+        if (!pptx.getBrand().getLogoPath().isBlank() && cursor < slide.getShapes().size())
+            validation.register(slideIndex, slide.getShapes().get(cursor++), LayoutRole.LOGO);
+        if (!footerText(source).isEmpty() && cursor < slide.getShapes().size())
+            validation.register(slideIndex, slide.getShapes().get(cursor++), LayoutRole.FOOTER);
+        if (pptx.getBrand().isSlideNumbers() && cursor < slide.getShapes().size())
+            validation.register(slideIndex, slide.getShapes().get(cursor), LayoutRole.SLIDE_NUMBER);
     }
 
     private void style(XSLFTextRun run, boolean templateAuthoritative) {

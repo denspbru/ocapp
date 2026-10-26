@@ -56,7 +56,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true verify
 
 Он использует `OCAPP_E2E_CHROME` и `OCAPP_E2E_CHROMEDRIVER` либо известные local/cache paths. Локальный opt-in без fail-closed gate явно пропускается, если совместимая пара отсутствует. CI обязан задавать `-Docapp.e2e.failClosed=true` либо `OCAPP_E2E_FAIL_CLOSED=true`: отсутствие executable, невозможность прочитать версию или несовпадение major тогда завершает Failsafe ошибкой. Ничего не скачивается. Profile проверяет MHTML/PDF/PPTX signatures и headers, safe/unsafe SVG, delayed Canvas, реально tainted cross-origin Canvas, delayed/missing ECharts, DOM-aware pagination, M6 hint extraction/precedence/OOXML metadata, HEAD-200/GET redirect chain, blocked private subresource, deterministic DOM extraction и cleanup временных профилей.
 
-Release gate `0.5.0` состоит из Apache POI structural reopen и fail-closed real-Chromium + LibreOffice visual smoke. Microsoft PowerPoint в автоматизированной среде не запускался и не заявляется как evidence; ручная проверка в PowerPoint выполняется, когда он доступен, и обязательна перед `1.0`/GA.
+Release gate `0.5.1` состоит из Apache POI structural/layout validation, fail-closed real-Chromium + LibreOffice smoke и checksum-protected visual regression. Microsoft PowerPoint в автоматизированной среде не запускался и не заявляется как evidence; ручная проверка в PowerPoint выполняется, когда он доступен, и обязательна перед `1.0`/GA.
 
 Опциональный external-office gate использует явно заданный локальный LibreOffice, отдельные bounded profiles и timeout; platform path не зашит в build. Он генерирует mixed M3, graphics M5, hints M6 и встроенный пятистраничный `test_report` реальным Chromium pipeline, экспортирует decks через Impress в PDF и рендерит PDF через PDFBox. M3 проверяет один slide/page, отсутствие потери/дублирования marker text, clickable URI, native image и localized Canvas fallback; M5 проверяет POI SVG+PNG picture types и видимые sanitized SVG, delayed Canvas и ECharts цвета; M6 проверяет две страницы, единственность title и видимый forced localized image; `test_report` проверяет пять hybrid slides, единственность native h1/h2, editable text/table, две SVG chart pictures, отсутствие slide-sized raster shape и сохраняет PNG preview каждой страницы. При заданном artifacts directory сохраняются исходные PPTX, PDF, PNG и LibreOffice logs:
 
@@ -75,7 +75,7 @@ mvn -Preal-browser -Docapp.e2e.failClosed=true \
 Встроенный default — `converter.security.egress-mode=PROXY` с пустым `proxy-url`, поэтому приложение **намеренно не запускается**, пока validating proxy не настроен:
 
 ```bash
-java -jar target/ocapp-0.5.0.jar \
+java -jar target/ocapp-0.5.1.jar \
   --converter.security.proxy-url=http://proxy.internal:3128 \
   --converter.browser.binary=/usr/bin/chromium \
   --converter.browser.driver-path=/usr/bin/chromedriver
@@ -144,6 +144,11 @@ converter.security.allow-private-addresses=true
 | `converter.pptx.template.original-slide-policy` | `REJECT` | Existing template content slides are rejected; explicit `REMOVE` deletes them from each fresh session |
 | `converter.pptx.template.max-*` | see `application.properties` | Compressed bytes, ZIP entries, entry bytes, expanded bytes and ratio gates before POI |
 | `converter.pptx.layouts.default-alias` | `content` | Global semantic layout fallback; per-page hint wins first |
+| `converter.pptx.layout-validation.text-overflow-tolerance-points` / `-ratio` | `1.0` / `0.02` | Warning when both absolute and relative measured overflow exceed thresholds |
+| `converter.pptx.layout-validation.minimum-body-font-points` / `minimum-footer-font-points` | `8` / `6` | Warning-only effective font thresholds |
+| `converter.pptx.layout-validation.minimum-image-ppi` | `96` | Warning-only displayed raster density threshold; SVG is exempt |
+| `converter.pptx.layout-validation.overlap-area-points` / `overlap-area-ratio` | `4` / `0.05` | Both thresholds must be exceeded for unintended-overlap warning |
+| `converter.pptx.layout-validation.max-diagnostics` / `max-shapes` / `max-text-shapes` / `max-images` / `max-overlap-comparisons` | `200` / `10000` / `5000` / `2000` / `100000` | Deterministic validation budgets; objective truncation is reported |
 | `converter.pptx.brand.*` | disabled/empty | Bounded local PNG/JPEG logo, colors/fonts/footer, redacted source URL and slide numbers |
 | `converter.page-model.max-blocks` / `max-depth` | `5000` / `64` | DOM model graph bounds до materialization |
 | `converter.page-model.max-text-length` / `max-table-cells` | `1000000` / `20000` | Общий text и table-cell budgets |
@@ -195,6 +200,21 @@ Optional `converter.pptx.template.path` принимает только absolute
 Aliases are fixed to `blank|title|title-only|content|section|closing`; configured layout names must resolve uniquely. One validated layout content box drives pagination, visual crops and editable mapping. Branding supports a bounded local PNG/JPEG logo whose dimensions/image count are read from ImageReader metadata before any pixel decode, optional colors/fonts when no template is configured, footer, source origin+path with user-info/query/fragment removed, and slide numbers. One immutable preflighted branding snapshot is shared by visual and editable paths. Branding shapes/assets participate in existing shape/asset/output budgets. Every deck is reopened by POI and checked for slide count, page geometry, template relationships and in-slide finite anchors. No-template defaults remain unchanged.
 
 Precedence v1: security/resource validation всегда выше hints; `ignore=true` удаляет subtree; explicit slide break выше pagination heuristics/`keep-together`; ancestor `render=image` выше descendant `render=native`; safety/representability fallback выше `render=native`. Для title/notes/layout побеждает первый непустой value по `(domOrder,id)`; отличающиеся последующие values дают один content-free `PPTX_HINT_CONFLICT` на атрибут и slide. Invalid enum/boolean/blank text даёт bounded content-free `PPTX_HINT_INVALID` и трактуется как отсутствие hint; Java boundary дополнительно отклоняет ненормализованные значения стабильным `PAGEMODEL_INVALID`. Значения title/notes и metadata подчиняются `max-field-length` и `max-metadata-characters`; parser warnings — `max-warnings`, а conflicts — не более трёх на slide при bounded `max-slides`. Warning custom properties содержат только code, slide index и имя атрибута, но не page content.
+
+## PPTX layout validation и visual regression (M8, 0.5.1)
+
+M8 не меняет HTTP request/response, MIME, filename или successful binary output release `0.5.0`. Каждый сгенерированный PPTX после serialization проходит bounded package validation, POI reopen и deterministic layout scan. Non-finite/negative/out-of-slide geometry и broken picture references блокируют output через прежний sanitized `422 PPTX_TEMPLATE_OUTPUT_INVALID`. Renderer/font-dependent quality findings — `TEXT_OVERFLOW`, `UNINTENDED_OVERLAP`, `TINY_FONT`, `EMPTY_SLIDE`, `LOW_RES_IMAGE` и `MEASUREMENT_UNAVAILABLE` — warning-only в `0.5.x`, чтобы сохранить compatibility. Interruption не превращается в diagnostic и сохраняет cancellation path.
+
+Stable content-free codes: `PPTX_LAYOUT_OUT_OF_SLIDE`, `PPTX_LAYOUT_TEXT_OVERFLOW`, `PPTX_LAYOUT_UNINTENDED_OVERLAP`, `PPTX_LAYOUT_TINY_FONT`, `PPTX_LAYOUT_EMPTY_SLIDE`, `PPTX_LAYOUT_LOW_RES_IMAGE`, `PPTX_LAYOUT_BROKEN_REFERENCE`, `PPTX_LAYOUT_MEASUREMENT_UNAVAILABLE`, `PPTX_LAYOUT_DIAGNOSTICS_TRUNCATED`. Diagnostics содержат только enum code/severity, slide/shape ordinals, allowlisted role/provenance и finite numeric actual/threshold values. Page/notes text, URL, filesystem/relationship path, shape names и image bytes не сохраняются. Fixed-field metrics включают visual/editable mode, role counts, fallback-area ratio, forced breaks, pagination warnings, quality counts и bounded truncation totals; логи используют только эти aggregate values.
+
+Visual regression изолирован от обычных Surefire и `real-browser` profile. `pptx-visual-regression` требует явно заданный local LibreOffice exact version, checksum-protected synthetic baselines и fixed 144-DPI PDFBox rendering. LibreOffice получает unique temporary profile, bounded output, timeout, invalid network proxies и process-tree cleanup. Missing/mismatched executable, baseline, checksum, page count или comparison — test failure. Tests никогда не обновляют baselines; actual/diff/metadata остаются только под `target/pptx-visual-regression`.
+
+```bash
+mvn -Ppptx-visual-regression \
+  -Docapp.visual.libreoffice=/absolute/path/to/soffice verify
+```
+
+M3–M7 real-browser fixtures продолжают покрывать text/table/SVG/Canvas/mixed/template pipelines, а isolated two-page synthetic baseline проверяет детерминированный Office/PDFBox image output.
 
 ## Lifecycle и health
 
