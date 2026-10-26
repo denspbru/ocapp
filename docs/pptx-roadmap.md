@@ -1,6 +1,6 @@
 # Roadmap интеллектуальной PPTX-конвертации
 
-Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-12.
+Статус документа: источник истины для проектирования и поэтапной реализации PPTX-конвертации. Дата актуализации: 2026-10-25.
 
 ## 1. Цель и границы
 
@@ -38,7 +38,7 @@ Chromium остаётся источником истины для вычисл�
 
 ## 2. Текущее состояние реализации
 
-Ниже baseline `0.4.0` дополнен M7 release `0.5.0`: M3/M6/M7 выпущены и их issues закрываются по release workflow. M8+ остаются целевой архитектурой.
+Ниже baseline `0.4.0` дополнен M7 release `0.5.0`. M8 реализуется как обратно совместимая quality platform текущей ветки `0.5.x`; M9 остаётся целевой архитектурой.
 
 ### HTTP и orchestration
 
@@ -282,17 +282,22 @@ Fidelity policy `0.4.0`: POI structural assertions use exact normalized values f
 
 ### M8 — layout validation и visual regression
 
-- **Status:** planned
-- **Target version:** `0.5.x`
-- **Issue:** [#18 — layout validation and visual regression](https://github.com/denspbru/ocapp/issues/18)
-- **Dependencies:** M2, M3; расширение coverage по мере M4/M5/M7.
-- **Deliverables:** structural/layout validator; stable warning/error taxonomy; presentation quality metrics; isolated visual-regression profile; baseline approval/update procedure; diff artifacts.
+- **Status:** implemented in current `0.5.x` development; unreleased and issue #18 remains open pending release workflow
+- **Target version:** `0.5.x`; wire/output compatibility baseline remains `0.5.0`
+- **Issue:** [#18 — PPTX layout validation and visual regression](https://github.com/denspbru/ocapp/issues/18)
+- **Dependencies:** M2, M3; representative real-browser coverage includes M4/M5/M7.
+- **Deliverables:** immutable versioned validation policy/report/metrics; deterministic bounded post-serialization POI scan; stable content-free `PPTX_LAYOUT_*` diagnostics; visual/editable shape roles and pagination metrics; existing public `PPTX_TEMPLATE_OUTPUT_INVALID` error mapping; isolated checksummed LibreOffice/PDFBox baseline profile and bounded diff artifacts.
+- **Compatibility:** no request field, MIME, filename or success-body change relative to `0.5.0`. Objective geometry/reference failures block; renderer/font-dependent quality findings remain warnings throughout `0.5.x`; interruption preserves cancellation.
+- **Diagnostic codes:** `OUT_OF_SLIDE`, `TEXT_OVERFLOW`, `UNINTENDED_OVERLAP`, `TINY_FONT`, `EMPTY_SLIDE`, `LOW_RES_IMAGE`, `BROKEN_REFERENCE`, `MEASUREMENT_UNAVAILABLE`, `DIAGNOSTICS_TRUNCATED`, all with `PPTX_LAYOUT_` public metadata prefix.
+- **Privacy:** diagnostics contain enums, ordinals, roles/provenance and finite numeric values only. Fixed-field metrics and logs contain aggregate counts/ratios only; no page/notes text, URLs, arbitrary names, filesystem/relationship paths or image bytes.
 - **Acceptance criteria:**
-  - fast structural validation выполняется для каждого сгенерированного PPTX;
-  - out-of-slide shapes, text overflow, unintended overlap, tiny fonts, empty slides и low-resolution images определяются по заданным policies;
-  - warning metadata bounded и не раскрывает page content;
-  - golden-image failure создаёт пригодный для анализа diff, не меняя baseline автоматически;
-  - representative text/table/SVG/Canvas/mixed/template fixtures покрыты regression suite.
+  - final serialized PPTX validation executes in both visual and editable paths with bounded shapes/text/images/overlap comparisons and deterministic truncation;
+  - valid `0.5.0` artifacts remain successful when quality findings are warnings; only objective invariants map to sanitized `422 PPTX_TEMPLATE_OUTPUT_INVALID`;
+  - visual-slice/branding, background, template-placeholder, fallback and notes semantics avoid false overlap/empty-slide noise;
+  - aggregate mode/role/fallback-area/forced-break/pagination-warning/quality metrics are tested without content leakage;
+  - `pptx-visual-regression` is isolated from normal and real-browser tests, requires exact local LibreOffice version, checksummed read-only baselines and fixed 144-DPI PDFBox output;
+  - missing/mismatched executable, baseline, checksum, page count, timeout or comparison fails closed; tests never mutate baselines;
+  - existing real-browser fixtures cover text/table/SVG/Canvas/mixed/template pipelines, while the synthetic two-page baseline verifies deterministic Office image output and reviewable diffs.
 
 ### M9 — semantic mode и optional AI
 

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.nicodim.ocapp.browser.BrowserFactory;
+import com.nicodim.ocapp.testsupport.LocalOfficeRunner;
 import com.nicodim.ocapp.browser.BrowserSession;
 import com.nicodim.ocapp.browser.ChromePageRenderer;
 import com.nicodim.ocapp.config.ConverterProperties;
@@ -40,7 +41,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
@@ -253,14 +253,7 @@ class RealBrowserE2EIT {
                 Path profile = work.resolve("libreoffice-test-report-profile");
                 Path pdf = work.resolve("test-report-after.pdf"), log = work.resolve("test-report-libreoffice.log");
                 try {
-                    Process process = new ProcessBuilder(executable, "--headless", "--nologo", "--nodefault", "--nolockcheck",
-                        "--norestore", "-env:UserInstallation=" + profile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
-                        "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
-                    boolean completed = process.waitFor(45, TimeUnit.SECONDS);
-                    if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
-                    assertThat(completed).withFailMessage("LibreOffice test_report conversion timed out; log=%s", log).isTrue();
-                    assertThat(process.exitValue()).withFailMessage("LibreOffice test_report exit; log=%s%n%s", log,
-                        Files.readString(log)).isZero();
+                    LocalOfficeRunner.convertToPdf(Path.of(executable), deck, work, log, Duration.ofSeconds(45), officePdfByteLimit());
                     try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
                         assertThat(document.getNumberOfPages()).isEqualTo(5);
                         String text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ");
@@ -508,13 +501,7 @@ class RealBrowserE2EIT {
                 assertThat(show.getSlides().get(0).getSlideLayout().getType()).isEqualTo(org.apache.poi.xslf.usermodel.SlideLayout.SECTION_HEADER);
                 assertThat(show.getProperties().getCustomProperties().getProperty("ocapp.template.contract").getLpwstr()).isEqualTo("1");
             }
-            Process process = new ProcessBuilder(soffice.toString(), "--headless", "--nologo", "--nodefault", "--nolockcheck",
-                "--norestore", "-env:UserInstallation=" + profile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
-                "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
-            boolean completed = process.waitFor(45, TimeUnit.SECONDS);
-            if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
-            assertThat(completed).withFailMessage("LibreOffice M7 conversion timed out; log=%s", log).isTrue();
-            assertThat(process.exitValue()).withFailMessage("LibreOffice M7 exit; log=%s%n%s", log, Files.readString(log)).isZero();
+            LocalOfficeRunner.convertToPdf(soffice, deck, work, log, Duration.ofSeconds(45), officePdfByteLimit());
             try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
                 assertThat(document.getNumberOfPages()).isEqualTo(2);
                 String text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT);
@@ -550,13 +537,7 @@ class RealBrowserE2EIT {
             Response response = post("/MakePPTX", fixtureBase + "/m6-hints");
             assertThat(response.status()).isEqualTo(200);
             Files.write(deck, response.body());
-            Process process = new ProcessBuilder(soffice.toString(), "--headless", "--nologo", "--nodefault", "--nolockcheck",
-                "--norestore", "-env:UserInstallation=" + profile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
-                "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
-            boolean completed = process.waitFor(45, TimeUnit.SECONDS);
-            if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
-            assertThat(completed).withFailMessage("LibreOffice M6 conversion timed out; log=%s", log).isTrue();
-            assertThat(process.exitValue()).withFailMessage("LibreOffice M6 exit; log=%s%n%s", log, Files.readString(log)).isZero();
+            LocalOfficeRunner.convertToPdf(soffice, deck, work, log, Duration.ofSeconds(45), officePdfByteLimit());
             try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
                 assertThat(document.getNumberOfPages()).isEqualTo(2);
                 String text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ");
@@ -600,13 +581,7 @@ class RealBrowserE2EIT {
             assertThat(anchors.nativeImage().getCenterX()).isLessThan(anchors.fallback().getCenterX());
             assertThat(anchors.nativeImage().intersects(anchors.fallback())).isFalse();
 
-            Process process = new ProcessBuilder(soffice.toString(), "--headless", "--nologo", "--nodefault", "--nolockcheck",
-                "--norestore", "-env:UserInstallation=" + officeProfile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
-                "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
-            boolean completed = process.waitFor(45, TimeUnit.SECONDS);
-            if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
-            assertThat(completed).withFailMessage("LibreOffice conversion timed out; log=%s", log).isTrue();
-            assertThat(process.exitValue()).withFailMessage("LibreOffice exit; log=%s%n%s", log, Files.readString(log)).isZero();
+            LocalOfficeRunner.convertToPdf(soffice, deck, work, log, Duration.ofSeconds(45), officePdfByteLimit());
             assertThat(pdf).isRegularFile();
             assertThat(Files.size(pdf)).isBetween(1L, 50L * 1024 * 1024);
 
@@ -654,13 +629,7 @@ class RealBrowserE2EIT {
                     .contains(org.apache.poi.sl.usermodel.PictureData.PictureType.SVG, org.apache.poi.sl.usermodel.PictureData.PictureType.PNG);
             }
 
-            Process process = new ProcessBuilder(soffice.toString(), "--headless", "--nologo", "--nodefault", "--nolockcheck",
-                "--norestore", "-env:UserInstallation=" + officeProfile.toUri(), "--convert-to", "pdf:impress_pdf_Export",
-                "--outdir", work.toString(), deck.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
-            boolean completed = process.waitFor(45, TimeUnit.SECONDS);
-            if (!completed) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); }
-            assertThat(completed).withFailMessage("LibreOffice M5 conversion timed out; log=%s", log).isTrue();
-            assertThat(process.exitValue()).withFailMessage("LibreOffice M5 exit; log=%s%n%s", log, Files.readString(log)).isZero();
+            LocalOfficeRunner.convertToPdf(soffice, deck, work, log, Duration.ofSeconds(45), officePdfByteLimit());
             assertThat(pdf).isRegularFile();
             assertThat(Files.size(pdf)).isBetween(1L, 50L * 1024 * 1024);
 
@@ -1050,6 +1019,21 @@ class RealBrowserE2EIT {
             if (value != null && Files.isExecutable(Path.of(value))) return Path.of(value);
         }
         return null;
+    }
+
+    private static long officePdfByteLimit() {
+        return positiveByteLimit("ocapp.e2e.maxPdfBytes", 32L * 1024 * 1024);
+    }
+
+    private static long positiveByteLimit(String property, long defaultValue) {
+        String configured = System.getProperty(property, Long.toString(defaultValue));
+        try {
+            long value = Long.parseLong(configured);
+            if (value < 1 || value > 512L * 1024 * 1024) throw new NumberFormatException();
+            return value;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(property + " must be between 1 and 536870912");
+        }
     }
 
     private static Path findDriver(Path chrome) throws IOException {

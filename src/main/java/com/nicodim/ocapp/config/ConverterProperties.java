@@ -151,6 +151,7 @@ public class ConverterProperties {
         @Valid private final Template template = new Template();
         @Valid private final Layouts layouts = new Layouts();
         @Valid private final Brand brand = new Brand();
+        @Valid private final LayoutValidation layoutValidation = new LayoutValidation();
         @DecimalMin("1.0") private double slideWidthInches = 13.333;
         @DecimalMin("1.0") private double slideHeightInches = 7.5;
         @Min(1) @Max(500) private int maxSlides = 100;
@@ -170,6 +171,7 @@ public class ConverterProperties {
         public Template getTemplate() { return template; }
         public Layouts getLayouts() { return layouts; }
         public Brand getBrand() { return brand; }
+        public LayoutValidation getLayoutValidation() { return layoutValidation; }
         public double getSlideWidthInches() { return slideWidthInches; } public void setSlideWidthInches(double v) { slideWidthInches = v; }
         public double getSlideHeightInches() { return slideHeightInches; } public void setSlideHeightInches(double v) { slideHeightInches = v; }
         public int getMaxSlides() { return maxSlides; } public void setMaxSlides(int v) { maxSlides = v; }
@@ -187,6 +189,33 @@ public class ConverterProperties {
         public long getMaxGraphicsExportPixels() { return maxGraphicsExportPixels; } public void setMaxGraphicsExportPixels(long v) { maxGraphicsExportPixels = v; }
         public long getMaxGraphicsExportBytes() { return maxGraphicsExportBytes; } public void setMaxGraphicsExportBytes(long v) { maxGraphicsExportBytes = v; }
 
+
+        public static class LayoutValidation {
+            @Min(1) @Max(100_000) private int maxShapes = 10_000;
+            @Min(1) @Max(100_000) private int maxTextShapes = 5_000;
+            @Min(1) @Max(100_000) private int maxImages = 2_000;
+            @Min(1) @Max(10_000) private int maxDiagnostics = 200;
+            @Min(0) @Max(10_000_000) private long maxOverlapComparisons = 100_000;
+            @DecimalMin("0.0") @DecimalMax("72.0") private double textOverflowTolerancePoints = 1.0;
+            @DecimalMin("0.0") @DecimalMax("1.0") private double textOverflowToleranceRatio = 0.02;
+            @DecimalMin("0.0") @DecimalMax("72.0") private double minimumBodyFontPoints = 8.0;
+            @DecimalMin("0.0") @DecimalMax("72.0") private double minimumFooterFontPoints = 6.0;
+            @DecimalMin("0.0") @DecimalMax("2400.0") private double minimumImagePpi = 96.0;
+            @DecimalMin("0.0") private double overlapAreaPoints = 4.0;
+            @DecimalMin("0.0") @DecimalMax("1.0") private double overlapAreaRatio = 0.05;
+            public int getMaxShapes() { return maxShapes; } public void setMaxShapes(int v) { maxShapes = v; }
+            public int getMaxTextShapes() { return maxTextShapes; } public void setMaxTextShapes(int v) { maxTextShapes = v; }
+            public int getMaxImages() { return maxImages; } public void setMaxImages(int v) { maxImages = v; }
+            public int getMaxDiagnostics() { return maxDiagnostics; } public void setMaxDiagnostics(int v) { maxDiagnostics = v; }
+            public long getMaxOverlapComparisons() { return maxOverlapComparisons; } public void setMaxOverlapComparisons(long v) { maxOverlapComparisons = v; }
+            public double getTextOverflowTolerancePoints() { return textOverflowTolerancePoints; } public void setTextOverflowTolerancePoints(double v) { textOverflowTolerancePoints = v; }
+            public double getTextOverflowToleranceRatio() { return textOverflowToleranceRatio; } public void setTextOverflowToleranceRatio(double v) { textOverflowToleranceRatio = v; }
+            public double getMinimumBodyFontPoints() { return minimumBodyFontPoints; } public void setMinimumBodyFontPoints(double v) { minimumBodyFontPoints = v; }
+            public double getMinimumFooterFontPoints() { return minimumFooterFontPoints; } public void setMinimumFooterFontPoints(double v) { minimumFooterFontPoints = v; }
+            public double getMinimumImagePpi() { return minimumImagePpi; } public void setMinimumImagePpi(double v) { minimumImagePpi = v; }
+            public double getOverlapAreaPoints() { return overlapAreaPoints; } public void setOverlapAreaPoints(double v) { overlapAreaPoints = v; }
+            public double getOverlapAreaRatio() { return overlapAreaRatio; } public void setOverlapAreaRatio(double v) { overlapAreaRatio = v; }
+        }
 
         public static class Template {
             public enum OriginalSlidePolicy { REJECT, REMOVE }

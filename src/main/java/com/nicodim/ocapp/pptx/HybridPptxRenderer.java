@@ -10,6 +10,9 @@ import com.nicodim.ocapp.pagemodel.TableSemantics;
 import com.nicodim.ocapp.pagination.PaginationPlan;
 import com.nicodim.ocapp.pagination.SlideSlice;
 import com.nicodim.ocapp.support.ConversionException;
+import com.nicodim.ocapp.pptx.validation.LayoutMode;
+import com.nicodim.ocapp.pptx.validation.LayoutRole;
+import com.nicodim.ocapp.pptx.validation.LayoutValidationContext;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.geom.Rectangle2D;
@@ -116,6 +119,10 @@ public final class HybridPptxRenderer {
                 throw tooLarge("PPTX branding assets exceed the configured limit");
             int[] assetCount = {branding.assetCount()};
             long[] assetBytes = {branding.assetBytes()};
+            int forcedBreaks = (int) plan.slices().stream()
+                .filter(slice -> slice.breakRationale() == com.nicodim.ocapp.pagination.BreakRationale.EXPLICIT_HINT).count();
+            LayoutValidationContext.Builder validation = LayoutValidationContext.builder(LayoutMode.EDITABLE)
+                .pagination(forcedBreaks, plan.warnings().size());
             for (int index = 0; index < plan.slices().size(); index++) {
                 SlideSlice slice = plan.slices().get(index);
                 String alias = authoring.slides().get(index).layout();
@@ -124,6 +131,7 @@ public final class HybridPptxRenderer {
                 CssCoordinateMapper mapper = boundedContent
                     ? new CssCoordinateMapper(slice, templateLoader.contentBox()) : new CssCoordinateMapper(slice);
                 for (RenderItem item : slideItems.get(index)) {
+                    int firstCreatedShape = slide.getShapes().size();
                     switch (item) {
                         case RenderItem.NativeBackground background -> addBackground(slide, mapper, background);
                         case RenderItem.ScreenshotCrop crop -> addCrop(show, slide, mapper, screenshot, model, crop);
@@ -133,21 +141,42 @@ public final class HybridPptxRenderer {
                         case RenderItem.NativeImage image -> addImage(show, slide, mapper, image, nativePictures, assetCount, assetBytes);
                         case RenderItem.NativeGraphic graphic -> addGraphic(show, slide, mapper, graphic, nativeGraphics, assetCount, assetBytes);
                     }
+                    LayoutRole role = validationRole(item);
+                    for (int created = firstCreatedShape; created < slide.getShapes().size(); created++)
+                        validation.register(index, slide.getShapes().get(created), role);
                 }
                 // Semantic title/notes are authored after visual content so an image fallback cannot obscure the title.
                 applySlideHints(show, slide, authoring.slides().get(index), templateLoader.contentBox());
+                for (var shape : slide.getShapes()) if (shape instanceof org.apache.poi.xslf.usermodel.XSLFTextShape text
+                    && (text.getTextType() == Placeholder.TITLE || text.getTextType() == Placeholder.CENTERED_TITLE))
+                    validation.register(index, shape, LayoutRole.SEMANTIC_TITLE);
                 branding.applyTheme(slide, templateLoader.configured());
+                int firstBrandShape = slide.getShapes().size();
                 branding.apply(show, slide, index + 1, model.document().source(), templateLoader.configured());
+                branding.registerValidationRoles(slide, firstBrandShape, index, model.document().source(), validation);
             }
             show.write(output);
             byte[] bytes = output.toByteArray();
-            PptxOutputValidator.validate(bytes, plan.slices().size(), templateLoader.configured());
+            PptxOutputValidator.validate(bytes, plan.slices().size(), templateLoader.configured(),
+                PptxOutputValidator.policy(properties), validation.build());
             return bytes;
         } catch (ConversionException ex) { throw ex; }
         catch (IOException | IllegalArgumentException ex) {
             throw new ConversionException(HttpStatus.UNPROCESSABLE_ENTITY, "PPTX_CREATION_FAILED",
                 "Editable presentation could not be created", ex);
         }
+    }
+
+    private static LayoutRole validationRole(RenderItem item) {
+        return switch (item) {
+            case RenderItem.NativeBackground ignored -> LayoutRole.BACKGROUND;
+            case RenderItem.ScreenshotCrop ignored -> LayoutRole.FALLBACK_CROP;
+            case RenderItem.NativeText ignored -> LayoutRole.NATIVE_TEXT;
+            case RenderItem.NativeListItem ignored -> LayoutRole.NATIVE_TEXT;
+            case RenderItem.NativeTable ignored -> LayoutRole.NATIVE_TABLE;
+            case RenderItem.NativeImage ignored -> LayoutRole.NATIVE_IMAGE;
+            case RenderItem.NativeGraphic ignored -> LayoutRole.NATIVE_GRAPHIC;
+        };
     }
 
     private static List<RenderItem> withoutDuplicateSemanticTitle(List<RenderItem> items, String title) {

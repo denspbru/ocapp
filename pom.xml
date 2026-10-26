@@ -18,6 +18,9 @@
     <java.version>21</java.version>
     <selenium.version>4.49.0</selenium.version>
     <poi.version>5.4.1</poi.version>
+    <ocapp.visual.libreoffice></ocapp.visual.libreoffice>
+    <ocapp.visual.maxPdfBytes>33554432</ocapp.visual.maxPdfBytes>
+    <ocapp.e2e.maxPdfBytes>33554432</ocapp.e2e.maxPdfBytes>
   </properties>
   <dependencies>
     <dependency>
@@ -77,10 +80,38 @@
               <includes><include>**/*E2EIT.java</include></includes>
               <systemPropertyVariables>
                 <ocapp.e2e.failClosed>${ocapp.e2e.failClosed}</ocapp.e2e.failClosed>
+                <ocapp.e2e.maxPdfBytes>${ocapp.e2e.maxPdfBytes}</ocapp.e2e.maxPdfBytes>
               </systemPropertyVariables>
             </configuration>
             <executions>
               <execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>pptx-visual-regression</id>
+      <properties><jacoco.skip>true</jacoco.skip></properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
+            <configuration><skipTests>true</skipTests></configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId><version>3.5.4</version>
+            <configuration>
+              <useModulePath>false</useModulePath>
+              <skipTests>false</skipTests>
+              <includes><include>**/*VisualRegressionIT.java</include></includes>
+              <systemPropertyVariables>
+                <ocapp.visual.libreoffice>${ocapp.visual.libreoffice}</ocapp.visual.libreoffice>
+                <ocapp.visual.maxPdfBytes>${ocapp.visual.maxPdfBytes}</ocapp.visual.maxPdfBytes>
+              </systemPropertyVariables>
+            </configuration>
+            <executions>
+              <execution><id>pptx-visual-regression</id><goals><goal>integration-test</goal><goal>verify</goal></goals></execution>
             </executions>
           </plugin>
         </plugins>

@@ -17,7 +17,7 @@
 
 Успех имеет `200`, binary body, точный `Content-Length`, safe attachment filename и correlation ID. Framework errors сохраняют `404`, `405`/`Allow`, `415`; unexpected exception становится sanitized `500`. Problem JSON не раскрывает stack/path/query/document/credentials.
 
-## 3. Реализованные функциональные требования M0–M7
+## 3. Реализованные функциональные требования M0–M8
 
 - **FR-001:** обязательный absolute HTTP(S) URL до 4096 chars, без user-info.
 - **FR-002:** request host и exact/wildcard patterns canonicalized одинаково: IDNA ASCII, lowercase, удаление всех terminal dots.
@@ -37,6 +37,11 @@
 - **FR-016:** template theme/master/layout authoritative; общий validated content box используется pagination, visual и editable paths. No-template/default branding сохраняет прежнее поведение.
 - **FR-017:** bounded local PNG/JPEG logo, optional no-template colors/fonts, footer, source origin/origin+path и slide numbers входят в shape/asset/output budgets; URL credentials/query/fragment не выводятся.
 - **FR-018:** каждый PPTX проходит POI structural reopen с проверкой slide count, geometry, template relationships и finite in-slide anchors.
+- **FR-019 (M8, backward-compatible with 0.5.0):** every generated PPTX is deterministically reopened and layout-validated before response; HTTP request schema, success headers/body and MIME/filename remain unchanged.
+- **FR-020:** objective package/reference/finite-geometry violations are blocking errors and map to the existing public sanitized `422 PPTX_TEMPLATE_OUTPUT_INVALID`; interruption preserves cancellation semantics, while bounded scan truncation is a warning. Internal stable diagnostics use only the `PPTX_LAYOUT_*` namespace.
+- **FR-021:** renderer/font-dependent findings (text overflow, unintended overlap, tiny fonts, empty slides, low-resolution images and unavailable measurements) remain warning-only throughout `0.5.x`; invalid geometry, out-of-slide shapes and broken picture references are errors. Warnings never create a new public Problem code.
+- **FR-022:** diagnostics and metrics are bounded and content-free: no page/notes text, hyperlink target, source URL/path/query, local filesystem path or image bytes; only stable codes, ordinals/roles/provenance and numeric aggregate measurements are allowed.
+- **FR-023:** visual regression is an isolated opt-in Maven profile with pinned local renderer/environment and approved checksummed baselines. Missing or mismatched prerequisites fail closed, failures retain bounded candidate/actual/diff artifacts under `target`, and baselines are never rewritten by the test run.
 
 ## 4. Нефункциональные требования
 
@@ -74,6 +79,15 @@
 7. Missing/incompatible/partial browser startup и bounded cached readiness probe покрыты.
 8. Local real-browser profile проверяет signatures/headers/cleanup, фактический delayed Canvas в MHTML/PPTX, GET redirects при HEAD 200, real/late GET 4xx/5xx и blocked private subresource.
 9. `mvn clean verify`, browser profile при наличии Chromium и `git diff --check` успешны.
+
+## 6.1. Критерии приёмки M8
+
+1. Fast structural/layout validation runs for every generated PPTX and stays bounded by diagnostic and per-slide shape budgets.
+2. Stable `PPTX_LAYOUT_*` diagnostics are deterministic; blocking findings expose only `PPTX_TEMPLATE_OUTPUT_INVALID` through Problem JSON.
+3. Warning-only quality findings preserve valid `0.5.0` artifacts; only objective invariant failures block output.
+4. Metrics/diagnostics tests prove absence of document text, URLs, filesystem paths and image payloads.
+5. Existing real-browser fixtures cover text/table/SVG/Canvas/mixed/template pipelines; the isolated visual profile adds fixed 144-DPI checksummed synthetic baselines and reviewable diff artifacts without baseline mutation.
+6. Missing LibreOffice, baseline/manifest, checksum/version mismatch, timeout or renderer/comparator failure fails the visual profile rather than skipping it.
 
 ## 7. Ограничения
 

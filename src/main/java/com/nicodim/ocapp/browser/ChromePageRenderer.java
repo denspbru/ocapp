@@ -15,6 +15,9 @@ import com.nicodim.ocapp.pptx.AuthoringHintResolver;
 import com.nicodim.ocapp.pptx.PptxOutputValidator;
 import com.nicodim.ocapp.pptx.PptxBranding;
 import com.nicodim.ocapp.pptx.PptxTemplateLoader;
+import com.nicodim.ocapp.pptx.validation.LayoutMode;
+import com.nicodim.ocapp.pptx.validation.LayoutRole;
+import com.nicodim.ocapp.pptx.validation.LayoutValidationContext;
 import com.nicodim.ocapp.security.UrlSecurityPolicy;
 import com.nicodim.ocapp.support.ConversionException;
 import java.awt.Dimension;
@@ -415,6 +418,11 @@ public class ChromePageRenderer implements PageRenderer {
                 java.awt.geom.Rectangle2D content = templateLoader.contentBox();
                 java.util.List<AuthoringHintResolver.SlideHints> hints = model == null || plan == null ? java.util.List.of()
                     : new AuthoringHintResolver().resolve(model, plan).slides();
+                int forcedBreaks = plan == null ? 0 : (int) plan.slices().stream()
+                    .filter(slice -> slice.breakRationale() == com.nicodim.ocapp.pagination.BreakRationale.EXPLICIT_HINT).count();
+                int paginationWarnings = plan == null ? 0 : plan.warnings().size();
+                LayoutValidationContext.Builder validation = LayoutValidationContext.builder(LayoutMode.VISUAL)
+                    .pagination(forcedBreaks, paginationWarnings);
                 int slideIndex = 0;
                 for (PixelSlice pixelSlice : pixelSlices) {
                     int y = pixelSlice.y(), height = pixelSlice.height();
@@ -428,13 +436,17 @@ public class ChromePageRenderer implements PageRenderer {
                     XSLFPictureShape shape = slide.createPicture(picture);
                     double renderedHeight = (double) height / source.getWidth() * content.getWidth();
                     shape.setAnchor(new java.awt.geom.Rectangle2D.Double(content.getX(), content.getY(), content.getWidth(), renderedHeight));
+                    validation.register(slideIndex, shape, LayoutRole.VISUAL_SLICE);
                     branding.applyTheme(slide, templateLoader.configured());
+                    int firstBrandShape = slide.getShapes().size();
                     branding.apply(show, slide, slideIndex + 1, sourceUri, templateLoader.configured());
+                    branding.registerValidationRoles(slide, firstBrandShape, slideIndex, sourceUri, validation);
                     slideIndex++;
                 }
                 show.write(output);
                 byte[] bytes = output.toByteArray();
-                PptxOutputValidator.validate(bytes, pixelSlices.size(), templateLoader.configured());
+                PptxOutputValidator.validate(bytes, pixelSlices.size(), templateLoader.configured(),
+                    PptxOutputValidator.policy(properties), validation.build());
                 return bytes;
             }
         } catch (ConversionException ex) { throw ex; }
